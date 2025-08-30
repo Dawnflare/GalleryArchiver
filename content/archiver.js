@@ -252,6 +252,11 @@
     // Hide app root if present
     const appRoot = document.querySelector('#__next') || document.querySelector('#app');
     if (appRoot) appRoot.style.display = 'none';
+    // Ensure the page can scroll normally once the live app is hidden
+    document.documentElement.style.height = 'auto';
+    document.documentElement.style.overflowY = 'auto';
+    document.body.style.height = 'auto';
+    document.body.style.overflowY = 'auto';
     // Reveal bucket with grid layout
     state.bucket.style.display = 'grid';
   }
