@@ -243,7 +243,9 @@
         }
       }
 
-      if ((scrollEl.scrollTop + scrollEl.clientHeight) >= (scrollEl.scrollHeight - 50)) {
+      const canScroll = (scrollEl.scrollHeight - scrollEl.clientHeight) > 100;
+      const nearBottom = (scrollEl.scrollTop + scrollEl.clientHeight) >= (scrollEl.scrollHeight - 50);
+      if (canScroll && nearBottom) {
         // likely end of page
         stopRunning(true);
         break;
@@ -275,6 +277,8 @@
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
     ensureBucket();
     startObserver();
+    const scrollEl = getScrollElement();
+    scrollEl.scrollTo(0, 0);
     scanOnce();
     autoScrollLoop();
   }
