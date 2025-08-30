@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Civitai Gallery Archiver",
+  "version": "0.1.0",
+  "description": "Capture Civitai infinite galleries into a single MHTML with clickable links per image. Core build: MHTML-only, no enrichment.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "pageCapture"
+  ],
+  "host_permissions": [
+    "https://civitai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Civitai Archiver"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://civitai.com/*"
+      ],
+      "js": [
+        "content/archiver.js"
+      ],
+      "css": [
+        "styles/bucket.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

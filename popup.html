@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Civitai Archiver</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 12px; min-width: 260px; color: #eee; background: #222; }
+      button { margin-right: 8px; margin-bottom: 8px; }
+      label { display: block; margin-top: 8px; }
+      input[type="number"] { width: 80px; }
+      .row { margin: 6px 0; }
+      .stat { font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <button id="start">Start</button>
+      <button id="stop">Stop</button>
+    </div>
+    <div class="row">
+      <button id="save">Save as MHTML</button>
+    </div>
+    <div class="row stat">
+      Seen: <span id="seen">0</span> &nbsp; Captured: <span id="captured">0</span> &nbsp; Deduped: <span id="deduped">0</span>
+    </div>
+    <div class="row">
+      <label>Max items: <input id="maxItems" type="number" min="10" max="100000" step="10" value="100"></label>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
