@@ -260,17 +260,16 @@
 
   function freezePage() {
     ensureBucket();
-    const scrollEl = state.scrollEl || (state.scrollEl = getScrollElement());
-    if (scrollEl && scrollEl !== document.scrollingElement && scrollEl !== document.documentElement && scrollEl !== document.body) {
-      scrollEl.style.display = 'none';
-    }
-    // Ensure the page can scroll normally once the live app is hidden
+    // In earlier versions we hid the live app and revealed the bucket to create a
+    // static grid for the MHTML export. Now that the browser reliably captures
+    // the full page, keep the app visible and leave the bucket hidden so the
+    // saved archive doesn't include a duplicate grid.
     document.documentElement.style.height = 'auto';
     document.documentElement.style.overflowY = 'auto';
     document.body.style.height = 'auto';
     document.body.style.overflowY = 'auto';
-    // Reveal bucket with flex layout
-    state.bucket.style.display = 'flex';
+    // Ensure bucket stays hidden
+    state.bucket.style.display = 'none';
   }
 
   async function startRunning() {
