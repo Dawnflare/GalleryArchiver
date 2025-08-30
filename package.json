@@ -1,0 +1,23 @@
+{
+  "name": "galleryarchiver",
+  "version": "1.0.0",
+  "description": "Brave/Chromium extension to capture Civitai infinite-scroll galleries as a **single MHTML** file.   **Core-only**: MHTML exporter, no enrichment, default max items = 100 for fast iteration.",
+  "main": "background.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^30.1.1",
+    "jest-environment-jsdom": "^30.1.1"
+  },
+  "jest": {
+    "testEnvironment": "jsdom"
+  }
+}

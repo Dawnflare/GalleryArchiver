@@ -260,7 +260,11 @@
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
   });
 
-  // Dev helper (console): window.__civitaiArchiverStart()
-  window.__civitaiArchiverStart = startRunning;
-  window.__civitaiArchiverStop = () => stopRunning(true);
-})();
+    // Dev helper (console): window.__civitaiArchiverStart()
+    window.__civitaiArchiverStart = startRunning;
+    window.__civitaiArchiverStop = () => stopRunning(true);
+
+    if (typeof module !== 'undefined' && module.exports) {
+      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI };
+    }
+  })();
