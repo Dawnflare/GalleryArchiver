@@ -32,7 +32,19 @@ document.getElementById('stop').addEventListener('click', async () => {
 
 document.getElementById('save').addEventListener('click', async () => {
   const tab = await getActiveTab();
-  chrome.runtime.sendMessage({ type: 'ARCHIVER_SAVE_MHTML', tabId: tab.id });
+  try {
+    const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
+    const url = URL.createObjectURL(mhtmlData);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    await chrome.downloads.download({
+      url,
+      filename: `civitai-archive-${ts}.mhtml`,
+      saveAs: true
+    });
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    console.error('MHTML save error:', e);
+  }
 });
 
 restoreOptions();
