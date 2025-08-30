@@ -31,7 +31,8 @@
       bucket.style.padding = '12px';
       bucket.style.gap = '12px';
       bucket.style.display = 'none';
-      bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+      bucket.style.flexWrap = 'wrap';
+      bucket.style.alignItems = 'flex-start';
       document.body.appendChild(bucket);
       state.bucket = bucket;
     }
@@ -67,7 +68,7 @@
 
   function createCardClone(detailUrl, imageUrl) {
     const article = document.createElement('article');
-    // Card styling so items render in a grid when saved
+    // Card styling so items render when saved
     article.style.border = '1px solid rgba(255,255,255,0.1)';
     article.style.borderRadius = '8px';
     article.style.padding = '8px';
@@ -82,8 +83,6 @@
 
     const img = document.createElement('img');
     img.src = imageUrl;
-    img.style.width = '100%';
-    img.style.height = 'auto';
     img.style.display = 'block';
     img.style.borderRadius = '6px';
 
@@ -257,8 +256,8 @@
     document.documentElement.style.overflowY = 'auto';
     document.body.style.height = 'auto';
     document.body.style.overflowY = 'auto';
-    // Reveal bucket with grid layout
-    state.bucket.style.display = 'grid';
+    // Reveal bucket with flex layout
+    state.bucket.style.display = 'flex';
   }
 
   async function startRunning() {
