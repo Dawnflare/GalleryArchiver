@@ -1,14 +1,15 @@
 
-/* Simple static grid for archived items */
+/* Simple flex layout for archived items allowing natural image sizes */
 #civitai-archiver-bucket {
   display: none; /* hidden until freeze */
   box-sizing: border-box;
   padding: 12px;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 #civitai-archiver-bucket.archiver-freeze {
-  display: grid !important;
+  display: flex !important;
 }
 #civitai-archiver-bucket article {
   border: 1px solid rgba(255,255,255,0.1);
@@ -21,7 +22,7 @@
   color: inherit;
 }
 #civitai-archiver-bucket img {
-  width: 100%;
+  width: auto;
   height: auto;
   display: block;
   border-radius: 6px;
