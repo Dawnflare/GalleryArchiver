@@ -97,6 +97,7 @@
   }
 
   function processAnchorImg(anchor, img) {
+    if (!state.running || state.captured >= state.maxItems) return;
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
     if (!detailUrl) return;
 
@@ -109,12 +110,13 @@
 
     // Set up stability gate
     stabilityWatcher(img, 400, async () => {
+      if (!state.running || state.captured >= state.maxItems) return;
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
       if (!bestNow || isTinyDataURI(bestNow)) return;
       // Create clone with bestNow
       const cloneImg = createCardClone(detailUrl, bestNow);
       const ok = await finalizeIfGood(cloneImg);
-      if (!ok) return;
+      if (!ok || !state.running) return;
 
       // Quality gate
       try {
@@ -133,22 +135,25 @@
       postStats();
 
       // Stop if we hit max
-      if (state.captured >= state.maxItems) stopRunning(/*freeze=*/true);
+      if (state.captured >= state.maxItems) stopRunning(true);
     });
 
     postStats();
   }
 
   function scanOnce() {
+    if (!state.running || state.captured >= state.maxItems) return;
     ensureBucket();
     // IMG-based cards
     document.querySelectorAll(SEL_ANCHOR_IMG).forEach(img => {
+      if (state.captured >= state.maxItems) return;
       const a = img.closest('a');
       if (a) processAnchorImg(a, img);
     });
 
     // CSS background-image anchors (fallback)
     document.querySelectorAll(SEL_ANCHOR_BG).forEach(a => {
+      if (state.captured >= state.maxItems) return;
       const style = getComputedStyle(a);
       const bg = style.backgroundImage;
       if (bg && bg !== 'none') {
@@ -157,14 +162,16 @@
           const url = absUrl(m[1]);
           const detailUrl = absUrl(a.getAttribute('href') || '');
           if (!detailUrl || state.seenDetailUrls.has(detailUrl)) return;
+          if (state.captured >= state.maxItems) return;
           state.seenDetailUrls.add(detailUrl);
           state.seen++;
 
           // Build clone
           stabilityWatcher(a, 400, async () => {
+            if (!state.running || state.captured >= state.maxItems) return;
             const cloneImg = createCardClone(detailUrl, url);
             const ok = await finalizeIfGood(cloneImg);
-            if (!ok) return;
+            if (!ok || !state.running) return;
             state.captured++;
             state.deduped = state.seenDetailUrls.size;
             state.lastNewItemAt = performance.now();
@@ -180,7 +187,10 @@
 
   function startObserver() {
     if (state.observer) return;
-    state.observer = new MutationObserver(() => scanOnce());
+    state.observer = new MutationObserver(() => {
+      if (!state.running || state.captured >= state.maxItems) return;
+      scanOnce();
+    });
     state.observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
   }
 
@@ -226,13 +236,14 @@
     state.bucket.classList.add('archiver-freeze');
   }
 
-  function startRunning() {
+  async function startRunning() {
     if (state.running) return;
     state.running = true;
-    // Load options
-    chrome.storage.local.get({ maxItems: 100 }, (opts) => {
-      state.maxItems = parseInt(opts.maxItems, 10) || 100;
+    // Load options before starting capture
+    const opts = await new Promise(resolve => {
+      chrome.storage.local.get({ maxItems: 100 }, resolve);
     });
+    state.maxItems = parseInt(opts.maxItems, 10) || 100;
     ensureBucket();
     startObserver();
     scanOnce();
