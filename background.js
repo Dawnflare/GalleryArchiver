@@ -20,11 +20,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         chrome.downloads.download(
           {
             url,
-            filename: `civitai-archive-${ts}.mhtml`
+            filename: `civitai-archive-${ts}.mhtml`,
+            saveAs: true
           },
-          () => {
+          (downloadId) => {
+            if (chrome.runtime.lastError) {
+              console.error('Download error:', chrome.runtime.lastError.message);
+              sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+              return;
+            }
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
-            sendResponse({ ok: true });
+            sendResponse({ ok: true, downloadId });
           }
         );
       });
