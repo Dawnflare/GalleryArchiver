@@ -13,6 +13,7 @@
     scrollTimer: null,
     lastNewItemAt: 0,
     bucket: null,
+    scrollEl: null,
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -214,11 +215,15 @@
   }
 
   function getScrollElement() {
+    for (const sel of ['#__next', '#app', 'main']) {
+      const el = document.querySelector(sel);
+      if (el && el.scrollHeight > el.clientHeight) return el;
+    }
     return document.scrollingElement || document.documentElement || document.body;
   }
 
   async function autoScrollLoop() {
-    const scrollEl = getScrollElement();
+    const scrollEl = state.scrollEl || (state.scrollEl = getScrollElement());
     state.lastNewItemAt = performance.now();
     while (state.running) {
       const before = state.captured;
@@ -255,9 +260,10 @@
 
   function freezePage() {
     ensureBucket();
-    // Hide app root if present
-    const appRoot = document.querySelector('#__next') || document.querySelector('#app');
-    if (appRoot) appRoot.style.display = 'none';
+    const scrollEl = state.scrollEl || (state.scrollEl = getScrollElement());
+    if (scrollEl && scrollEl !== document.scrollingElement && scrollEl !== document.documentElement && scrollEl !== document.body) {
+      scrollEl.style.display = 'none';
+    }
     // Ensure the page can scroll normally once the live app is hidden
     document.documentElement.style.height = 'auto';
     document.documentElement.style.overflowY = 'auto';
@@ -277,8 +283,8 @@
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
     ensureBucket();
     startObserver();
-    const scrollEl = getScrollElement();
-    scrollEl.scrollTo(0, 0);
+    state.scrollEl = getScrollElement();
+    state.scrollEl.scrollTo(0, 0);
     scanOnce();
     autoScrollLoop();
   }
