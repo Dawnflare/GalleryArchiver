@@ -26,6 +26,12 @@
     if (!state.bucket) {
       const bucket = document.createElement('div');
       bucket.id = 'civitai-archiver-bucket';
+      // Inline styles so that saved MHTML doesn't rely on extension CSS
+      bucket.style.boxSizing = 'border-box';
+      bucket.style.padding = '12px';
+      bucket.style.gap = '12px';
+      bucket.style.display = 'none';
+      bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
       document.body.appendChild(bucket);
       state.bucket = bucket;
     }
@@ -61,12 +67,26 @@
 
   function createCardClone(detailUrl, imageUrl) {
     const article = document.createElement('article');
+    // Card styling so items render in a grid when saved
+    article.style.border = '1px solid rgba(255,255,255,0.1)';
+    article.style.borderRadius = '8px';
+    article.style.padding = '8px';
+    article.style.background = '#111';
+
     const a = document.createElement('a');
     a.href = detailUrl;
     a.target = '_blank';
     a.rel = 'noopener';
+    a.style.textDecoration = 'none';
+    a.style.color = 'inherit';
+
     const img = document.createElement('img');
     img.src = imageUrl;
+    img.style.width = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
+    img.style.borderRadius = '6px';
+
     a.appendChild(img);
     article.appendChild(a);
     state.bucket.appendChild(article);
@@ -232,8 +252,8 @@
     // Hide app root if present
     const appRoot = document.querySelector('#__next') || document.querySelector('#app');
     if (appRoot) appRoot.style.display = 'none';
-    // Reveal bucket
-    state.bucket.classList.add('archiver-freeze');
+    // Reveal bucket with grid layout
+    state.bucket.style.display = 'grid';
   }
 
   async function startRunning() {
