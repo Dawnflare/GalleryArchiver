@@ -213,11 +213,16 @@
     state.observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
   }
 
+  function getScrollElement() {
+    return document.scrollingElement || document.documentElement || document.body;
+  }
+
   async function autoScrollLoop() {
+    const scrollEl = getScrollElement();
     state.lastNewItemAt = performance.now();
     while (state.running) {
       const before = state.captured;
-      window.scrollBy(0, window.innerHeight * 0.9);
+      scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
       await new Promise(r => setTimeout(r, 600));
 
       scanOnce();
@@ -228,7 +233,7 @@
         state.lastNewItemAt = now;
       } else if (now - state.lastNewItemAt > 6000) {
         // try a stutter scroll
-        window.scrollBy(0, 50);
+        scrollEl.scrollBy(0, 50);
         await new Promise(r => setTimeout(r, 400));
         scanOnce();
         if (performance.now() - state.lastNewItemAt > 10000) {
@@ -238,7 +243,7 @@
         }
       }
 
-      if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 50)) {
+      if ((scrollEl.scrollTop + scrollEl.clientHeight) >= (scrollEl.scrollHeight - 50)) {
         // likely end of page
         stopRunning(true);
         break;
