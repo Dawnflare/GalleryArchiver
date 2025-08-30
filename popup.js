@@ -34,7 +34,9 @@ document.getElementById('save').addEventListener('click', async () => {
   const tab = await getActiveTab();
   try {
     const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
-    const url = URL.createObjectURL(mhtmlData);
+    // Explicitly set the MIME type so the download uses an .mhtml extension
+    const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
+    const url = URL.createObjectURL(blob);
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     await chrome.downloads.download({
       url,

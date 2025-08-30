@@ -14,7 +14,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: false, error: chrome.runtime.lastError.message });
           return;
         }
-        const blob = mhtmlData; // Blob
+        // Ensure the blob has the correct MIME type so Windows doesn't default to .txt
+        const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
         const url = URL.createObjectURL(blob);
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
         chrome.downloads.download(
