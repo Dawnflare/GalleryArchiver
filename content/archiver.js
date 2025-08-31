@@ -21,12 +21,50 @@
     origBodyStyle: '',
   };
 
-  const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
-  const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
+    const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
+    const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
+    // New selector for videos inside the same gallery anchors:
+    const SEL_ANCHOR_VIDEO = 'a[href*="/images/"] video, a[href^="/images/"] video';
 
-  function absUrl(href) {
-    try { return new URL(href, location.origin).toString(); } catch { return href; }
-  }
+    function absUrl(href) {
+      try { return new URL(href, location.origin).toString(); } catch { return href; }
+    }
+
+    // --- Helpers ---
+    function blobToDataURL(blob) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onloadend = () => resolve(fr.result);
+        fr.onerror = reject;
+        fr.readAsDataURL(blob);
+      });
+    }
+
+    // Return BOTH data URL and the MIME type we actually got back.
+    async function fetchAsDataURLWithType(url) {
+      const r = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'force-cache' });
+      if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
+      const b = await r.blob();
+      const dataUrl = await blobToDataURL(b);
+      return { dataUrl, mime: b.type || '' };
+    }
+
+    // Prefer WEBM if available, else MP4, else currentSrc/src.
+    function findPreferredVideoSource(videoEl) {
+      const sources = [...videoEl.querySelectorAll('source')];
+      const byType = (t) => sources.find(s => (s.type || '').toLowerCase() === t)?.src;
+      const byExt  = (re) => sources.map(s => s.src).find(u => re.test(u || ''));
+
+      return (
+        byType('video/webm') ||
+        byExt(/\.webm($|\?)/i) ||
+        byType('video/mp4') ||
+        byExt(/\.mp4($|\?)/i) ||
+        videoEl.currentSrc ||
+        videoEl.src ||
+        null
+      );
+    }
 
   function ensureBucket() {
     if (!state.bucket) {
@@ -244,16 +282,85 @@
     document.body.setAttribute('style', state.origBodyStyle);
   }
 
-  function freezePage() {
-    ensureBucket();
-    // In earlier versions we hid the live app and revealed the bucket to create a
-    // static grid for the MHTML export. Now that the browser reliably captures
-    // the full page, keep the app visible and leave the bucket hidden so the
-    // saved archive doesn't include a duplicate grid.
-    restoreScrollStyles();
-    // Ensure bucket stays hidden
-    state.bucket.style.display = 'none';
-  }
+    function freezePage() {
+      ensureBucket();
+      // In earlier versions we hid the live app and revealed the bucket to create a
+      // static grid for the MHTML export. Now that the browser reliably captures
+      // the full page, keep the app visible and leave the bucket hidden so the
+      // saved archive doesn't include a duplicate grid.
+      restoreScrollStyles();
+      // Ensure bucket stays hidden
+      state.bucket.style.display = 'none';
+    }
+
+    async function inlineSingleVideoBinary(videoEl, { inlinePoster = true } = {}) {
+      try {
+        const srcUrl = findPreferredVideoSource(videoEl);
+        if (!srcUrl) return { ok: false, reason: 'no-src' };
+
+        // Fetch the video bytes and get the true MIME (CDN may return mp4 even for .webm path)
+        const { dataUrl, mime } = await fetchAsDataURLWithType(srcUrl);
+
+        // Poster is optional; inlining improves first frame offline
+        let posterAttr = videoEl.poster || null;
+        if (inlinePoster && posterAttr) {
+          try {
+            const poster = await fetchAsDataURLWithType(posterAttr);
+            posterAttr = poster.dataUrl;
+          } catch {
+            /* keep original poster URL if inline fails */
+          }
+        }
+
+        // Build replacement <video> that autoplays + loops offline (muted is required for autoplay)
+        const nv = document.createElement('video');
+        nv.muted = true;
+        nv.loop = true;
+        nv.autoplay = true;
+        nv.playsInline = true;
+        nv.setAttribute('playsinline', '');
+        nv.setAttribute('preload', 'auto');
+
+        // Preserve layout/appearance
+        if (videoEl.getAttribute('style')) nv.setAttribute('style', videoEl.getAttribute('style'));
+        if (videoEl.className) nv.className = videoEl.className;
+        if (posterAttr) nv.setAttribute('poster', posterAttr);
+
+        // Data-source with correct MIME
+        const source = document.createElement('source');
+        source.src = dataUrl;
+        if (mime) source.type = mime;
+        nv.appendChild(source);
+
+        videoEl.replaceWith(nv);
+        return { ok: true };
+      } catch (err) {
+        console.error('inlineSingleVideoBinary failed', err);
+        return { ok: false, reason: String(err) };
+      }
+    }
+
+    async function inlineVideosForSnapshot(maxConcurrent = 3) {
+      const videos = [...document.querySelectorAll(SEL_ANCHOR_VIDEO)]
+        .filter(v => v.closest('a[href*="/images/"], a[href^="/images/"]'));
+
+      let i = 0, inlined = 0, failed = 0;
+
+      async function worker() {
+        while (i < videos.length) {
+          const v = videos[i++];
+          try {
+            const res = await inlineSingleVideoBinary(v, { inlinePoster: true });
+            if (res.ok) inlined++; else failed++;
+          } catch {
+            failed++;
+          }
+        }
+      }
+
+      await Promise.all(Array(Math.min(maxConcurrent, videos.length)).fill(0).map(() => worker()));
+      return { total: videos.length, inlined, failed };
+    }
 
   async function startRunning() {
     if (state.running) return;
@@ -311,20 +418,42 @@
     postState();
   }
 
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type === 'ARCHIVER_START') startRunning();
-    if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
-    if (msg?.type === 'ARCHIVER_RESET') {
-      stopRunning(false);
-      sendResponse();
-    }
-  });
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      if (msg?.type === 'ARCHIVER_START') startRunning();
+      if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+      if (msg?.type === 'ARCHIVER_RESET') {
+        stopRunning(false);
+        sendResponse();
+      }
+      if (msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+        inlineVideosForSnapshot(3)
+          .then((stats) => {
+            // If your current flow freezes the page before saving, keep it here or in background.
+            // freezePage();
+            setTimeout(() => sendResponse({ ok: true, stats }), 150);
+          })
+          .catch((err) => {
+            console.error('prepare-for-save failed', err);
+            setTimeout(() => sendResponse({ ok: false, error: String(err) }), 150);
+          });
+        return true;
+      }
+    });
 
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
 
-    if (typeof module !== 'undefined' && module.exports) {
-      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI };
-    }
+      if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+          absUrl,
+          pickBestFromSrcset,
+          isTinyDataURI,
+          blobToDataURL,
+          fetchAsDataURLWithType,
+          findPreferredVideoSource,
+          inlineSingleVideoBinary,
+          inlineVideosForSnapshot
+        };
+      }
   })();
