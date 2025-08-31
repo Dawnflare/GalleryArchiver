@@ -9,9 +9,9 @@
     maxItems: 100,
     scrollDelay: 300,
     stabilityTimeout: 400,
-    items: new Map(), // key -> { detailUrl, imageUrl, el, state }
+    items: new Map(), // key -> { detailUrl, mediaUrl, el, state }
     seenDetailUrls: new Set(), // dedupe by detail link
-    allImageUrls: new Set(), // every image destined for archive
+    allMediaUrls: new Set(), // every media destined for archive
     observer: null,
     scrollTimer: null,
     lastNewItemAt: 0,
@@ -22,6 +22,7 @@
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
+  const SEL_ANCHOR_VIDEO = 'a[href*="/images/"] video, a[href^="/images/"] video';
   const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
 
   function absUrl(href) {
@@ -44,7 +45,7 @@
       seen: state.seen,
       captured: state.captured,
       deduped: state.deduped,
-      total: state.allImageUrls.size
+      total: state.allMediaUrls.size
     });
   }
 
@@ -84,6 +85,30 @@
       if (imgEl.complete && imgEl.naturalWidth > 0) return done();
       imgEl.addEventListener('load', done, { once: true });
       imgEl.addEventListener('error', () => resolve(false), { once: true });
+    });
+  }
+
+  async function fetchAsDataUrl(url) {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      const blob = await res.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  function finalizeVideo(videoEl) {
+    return new Promise((resolve) => {
+      const done = () => resolve(true);
+      if (videoEl.readyState >= 2) return done(); // HAVE_CURRENT_DATA
+      videoEl.addEventListener('loadeddata', done, { once: true });
+      videoEl.addEventListener('error', () => resolve(false), { once: true });
     });
   }
 
@@ -130,7 +155,50 @@
       state.captured++;
       state.deduped = state.seenDetailUrls.size;
       state.lastNewItemAt = performance.now();
-      state.allImageUrls.add(absUrl(bestNow));
+      state.allMediaUrls.add(absUrl(bestNow));
+      postStats();
+      postState();
+
+      if (state.captured >= state.maxItems) stopRunning(false, false);
+    });
+
+    postStats();
+  }
+
+  function processAnchorVideo(anchor, video) {
+    if (!state.running || state.captured >= state.maxItems) return;
+    const detailUrl = absUrl(anchor.getAttribute('href') || '');
+    if (!detailUrl) return;
+
+    if (state.seenDetailUrls.has(detailUrl)) return;
+    state.seenDetailUrls.add(detailUrl);
+    state.seen++;
+
+    const initialUrl = video.currentSrc || video.src || (video.querySelector('source')?.src) || '';
+
+    stabilityWatcher(video, state.stabilityTimeout, async () => {
+      if (!state.running || state.captured >= state.maxItems) return;
+      const bestNow = video.currentSrc || video.src || (video.querySelector('source')?.src) || initialUrl;
+      if (!bestNow) return;
+
+      const dataUrl = await fetchAsDataUrl(absUrl(bestNow));
+      if (!dataUrl) return;
+
+      const cloneVid = document.createElement('video');
+      cloneVid.src = dataUrl;
+      cloneVid.controls = true;
+      state.bucket.appendChild(cloneVid);
+      cloneVid.load();
+      const ok = await finalizeVideo(cloneVid);
+      if (!ok || !state.running) {
+        cloneVid.remove();
+        return;
+      }
+
+      state.captured++;
+      state.deduped = state.seenDetailUrls.size;
+      state.lastNewItemAt = performance.now();
+      state.allMediaUrls.add(absUrl(bestNow));
       postStats();
       postState();
 
@@ -148,6 +216,13 @@
       if (state.captured >= state.maxItems) return;
       const a = img.closest('a');
       if (a) processAnchorImg(a, img);
+    });
+
+    // VIDEO-based cards
+    document.querySelectorAll(SEL_ANCHOR_VIDEO).forEach(video => {
+      if (state.captured >= state.maxItems) return;
+      const a = video.closest('a');
+      if (a) processAnchorVideo(a, video);
     });
 
     // CSS background-image anchors (fallback)
@@ -178,7 +253,7 @@
             state.captured++;
             state.deduped = state.seenDetailUrls.size;
             state.lastNewItemAt = performance.now();
-            state.allImageUrls.add(absUrl(url));
+            state.allMediaUrls.add(absUrl(url));
             postStats();
             postState();
             if (state.captured >= state.maxItems) stopRunning(false, false);
@@ -262,7 +337,7 @@
     state.captured = 0;
     state.deduped = 0;
     state.seenDetailUrls.clear();
-    state.allImageUrls = new Set();
+    state.allMediaUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
     chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
@@ -270,10 +345,14 @@
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
-    // Collect any images already on the page
+    // Collect any media already on the page
     document.querySelectorAll('img').forEach(img => {
       const url = pickBestFromSrcset(img) || img.currentSrc || img.src;
-      if (url) state.allImageUrls.add(absUrl(url));
+      if (url) state.allMediaUrls.add(absUrl(url));
+    });
+    document.querySelectorAll('video').forEach(v => {
+      const url = v.currentSrc || v.src || (v.querySelector('source')?.src);
+      if (url) state.allMediaUrls.add(absUrl(url));
     });
     postStats();
     postState();
