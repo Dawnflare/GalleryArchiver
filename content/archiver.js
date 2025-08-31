@@ -241,16 +241,20 @@
     }
   }
 
+  function resetScrollStyles() {
+    document.documentElement.style.height = 'auto';
+    document.documentElement.style.overflowY = 'auto';
+    document.body.style.height = 'auto';
+    document.body.style.overflowY = 'auto';
+  }
+
   function freezePage() {
     ensureBucket();
     // In earlier versions we hid the live app and revealed the bucket to create a
     // static grid for the MHTML export. Now that the browser reliably captures
     // the full page, keep the app visible and leave the bucket hidden so the
     // saved archive doesn't include a duplicate grid.
-    document.documentElement.style.height = 'auto';
-    document.documentElement.style.overflowY = 'auto';
-    document.body.style.height = 'auto';
-    document.body.style.overflowY = 'auto';
+    resetScrollStyles();
     // Ensure bucket stays hidden
     state.bucket.style.display = 'none';
   }
@@ -282,6 +286,7 @@
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
+    resetScrollStyles();
     autoScrollLoop();
   }
 
