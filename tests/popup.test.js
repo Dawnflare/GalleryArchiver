@@ -4,7 +4,7 @@ document.body.innerHTML = `
   <button id="save"></button>
   <input id="maxItems" />
   <span id="seen"></span>
-  <span id="captured"></span>
+  <span id="loaded"></span>
   <span id="deduped"></span>
 `;
 

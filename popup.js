@@ -55,7 +55,7 @@ restoreOptions();
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg?.type === 'ARCHIVER_STATS') {
     document.getElementById('seen').textContent = String(msg.seen ?? 0);
-    document.getElementById('captured').textContent = String(msg.captured ?? 0);
+    document.getElementById('loaded').textContent = String(msg.loaded ?? 0);
     document.getElementById('deduped').textContent = String(msg.deduped ?? 0);
   }
 });
