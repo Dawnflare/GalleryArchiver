@@ -90,7 +90,7 @@
 
   async function fetchAsDataUrl(url) {
     try {
-      const res = await fetch(url, { mode: 'cors' });
+      const res = await fetch(url, { mode: 'cors', credentials: 'include' });
       const blob = await res.blob();
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -188,6 +188,7 @@
       const cloneVid = document.createElement('video');
       cloneVid.controls = true;
       cloneVid.preload = 'auto';
+      cloneVid.src = result.dataUrl;
       const source = document.createElement('source');
       source.src = result.dataUrl;
       if (result.mime) source.type = result.mime;
