@@ -326,11 +326,17 @@
         if (videoEl.className) nv.className = videoEl.className;
         if (posterAttr) nv.setAttribute('poster', posterAttr);
 
-        // Data-source with correct MIME
-        const source = document.createElement('source');
-        source.src = dataUrl;
-        if (mime) source.type = mime;
-        nv.appendChild(source);
+        // Ensure boolean attributes are present so MHTML preserves autoplay/loop/muted
+        nv.setAttribute('muted', '');
+        nv.setAttribute('autoplay', '');
+        nv.setAttribute('loop', '');
+
+        // Set src directly on the <video> for reliability with data: URIs
+        nv.src = dataUrl;
+
+        // Nudge load/play on the live page (optional, no-ops in MHTML)
+        try { nv.load(); } catch (e) {}
+        try { const p = nv.play(); if (p && p.catch) p.catch(()=>{}); } catch (e) {}
 
         videoEl.replaceWith(nv);
         return { ok: true };
