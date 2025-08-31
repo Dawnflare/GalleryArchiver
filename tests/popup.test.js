@@ -1,6 +1,7 @@
 document.body.innerHTML = `
   <button id="start"></button>
   <button id="stop"></button>
+  <button id="reset"></button>
   <button id="save"></button>
   <input id="maxItems" />
   <input id="scrollDelay" />

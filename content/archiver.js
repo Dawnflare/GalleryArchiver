@@ -290,6 +290,7 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'ARCHIVER_START') startRunning();
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+    if (msg?.type === 'ARCHIVER_RESET') stopRunning(false);
   });
 
     // Dev helper (console): window.__civitaiArchiverStart()
