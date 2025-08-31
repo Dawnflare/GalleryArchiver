@@ -27,13 +27,7 @@
     if (!state.bucket) {
       const bucket = document.createElement('div');
       bucket.id = 'civitai-archiver-bucket';
-      // Inline styles so that saved MHTML doesn't rely on extension CSS
-      bucket.style.boxSizing = 'border-box';
-      bucket.style.padding = '12px';
-      bucket.style.gap = '12px';
       bucket.style.display = 'none';
-      bucket.style.flexWrap = 'wrap';
-      bucket.style.alignItems = 'flex-start';
       document.body.appendChild(bucket);
       state.bucket = bucket;
     }
@@ -67,31 +61,7 @@
     return /^data:/.test(url) && url.length < 1024; // 1 KB threshold
   }
 
-  function createCardClone(detailUrl, imageUrl) {
-    const article = document.createElement('article');
-    // Card styling so items render when saved
-    article.style.border = '1px solid rgba(255,255,255,0.1)';
-    article.style.borderRadius = '8px';
-    article.style.padding = '8px';
-    article.style.background = '#111';
-
-    const a = document.createElement('a');
-    a.href = detailUrl;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.style.textDecoration = 'none';
-    a.style.color = 'inherit';
-
-    const img = document.createElement('img');
-    img.src = imageUrl;
-    img.style.display = 'block';
-    img.style.borderRadius = '6px';
-
-    a.appendChild(img);
-    article.appendChild(a);
-    state.bucket.appendChild(article);
-    return img;
-  }
+  // Ensure an image element is fully loaded
 
   function finalizeIfGood(imgEl) {
     return new Promise((resolve) => {
@@ -125,36 +95,28 @@
     state.seenDetailUrls.add(detailUrl);
     state.seen++;
 
-    const candidateNow = pickBestFromSrcset(img) || img.src || '';
-    const initialUrl = candidateNow;
+    const initialUrl = pickBestFromSrcset(img) || img.src || '';
 
-    // Set up stability gate
+    // Wait for image attributes to settle before cloning
     stabilityWatcher(img, 400, async () => {
       if (!state.running || state.captured >= state.maxItems) return;
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
       if (!bestNow || isTinyDataURI(bestNow)) return;
-      // Create clone with bestNow
-      const cloneImg = createCardClone(detailUrl, bestNow);
-      const ok = await finalizeIfGood(cloneImg);
-      if (!ok || !state.running) return;
 
-      // Quality gate
-      try {
-        const w = cloneImg.naturalWidth;
-        const rendered = Math.max(1, cloneImg.clientWidth || 200);
-        if (w < rendered * 0.8) {
-          // Low quality relative to displayed size; ignore
-          cloneImg.closest('article')?.remove();
-          return;
-        }
-      } catch {}
+      const cloneImg = document.createElement('img');
+      cloneImg.src = bestNow;
+      state.bucket.appendChild(cloneImg);
+      const ok = await finalizeIfGood(cloneImg);
+      if (!ok || !state.running) {
+        cloneImg.remove();
+        return;
+      }
 
       state.captured++;
       state.deduped = state.seenDetailUrls.size;
       state.lastNewItemAt = performance.now();
       postStats();
 
-      // Stop if we hit max
       if (state.captured >= state.maxItems) stopRunning(true);
     });
 
@@ -186,12 +148,16 @@
           state.seenDetailUrls.add(detailUrl);
           state.seen++;
 
-          // Build clone
           stabilityWatcher(a, 400, async () => {
             if (!state.running || state.captured >= state.maxItems) return;
-            const cloneImg = createCardClone(detailUrl, url);
+            const cloneImg = document.createElement('img');
+            cloneImg.src = url;
+            state.bucket.appendChild(cloneImg);
             const ok = await finalizeIfGood(cloneImg);
-            if (!ok || !state.running) return;
+            if (!ok || !state.running) {
+              cloneImg.remove();
+              return;
+            }
             state.captured++;
             state.deduped = state.seenDetailUrls.size;
             state.lastNewItemAt = performance.now();
@@ -290,7 +256,12 @@
 
   function stopRunning(freeze=false) {
     state.running = false;
-    if (freeze) freezePage();
+    if (freeze) {
+      freezePage();
+    } else if (state.bucket) {
+      state.bucket.remove();
+      state.bucket = null;
+    }
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
