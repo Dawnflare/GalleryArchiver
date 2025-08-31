@@ -34,7 +34,8 @@ document.getElementById('stop').addEventListener('click', async () => {
   chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_STOP' });
 });
 
-document.getElementById('reset').addEventListener('click', () => {
+document.getElementById('reset').addEventListener('click', async () => {
+  await sendToContent('ARCHIVER_RESET');
   chrome.runtime.reload();
 });
 

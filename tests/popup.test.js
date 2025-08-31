@@ -43,9 +43,15 @@ test('save button triggers page capture and download', async () => {
   expect(chrome.downloads.download).toHaveBeenCalled();
 });
 
-test('reset button reloads the extension', async () => {
+test('reset button stops autoscroll then reloads the extension', async () => {
   chrome.runtime.reload.mockClear();
+  chrome.tabs.sendMessage.mockClear();
   document.getElementById('reset').click();
+  // wait for async handler to complete
   await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, { type: 'ARCHIVER_RESET', payload: {} });
   expect(chrome.runtime.reload).toHaveBeenCalled();
+  expect(chrome.tabs.sendMessage.mock.invocationCallOrder[0]).toBeLessThan(chrome.runtime.reload.mock.invocationCallOrder[0]);
 });
