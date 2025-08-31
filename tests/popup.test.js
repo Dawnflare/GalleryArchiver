@@ -26,7 +26,7 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() } }
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() }
 };
 
 require('../popup.js');
@@ -44,16 +44,20 @@ test('save button triggers page capture and download', async () => {
   expect(chrome.downloads.download).toHaveBeenCalled();
 });
 
-test('reset button stops autoscroll then reloads the page', async () => {
+test('reset button stops autoscroll, reloads the page and extension', async () => {
   chrome.tabs.reload.mockClear();
   chrome.tabs.sendMessage.mockClear();
+  chrome.runtime.reload.mockClear();
   document.getElementById('reset').click();
   // wait for async handler to complete
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
   expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, { type: 'ARCHIVER_RESET', payload: {} });
   expect(chrome.tabs.reload).toHaveBeenCalledWith(123);
+  expect(chrome.runtime.reload).toHaveBeenCalled();
   expect(chrome.tabs.sendMessage.mock.invocationCallOrder[0]).toBeLessThan(chrome.tabs.reload.mock.invocationCallOrder[0]);
+  expect(chrome.tabs.reload.mock.invocationCallOrder[0]).toBeLessThan(chrome.runtime.reload.mock.invocationCallOrder[0]);
 });
