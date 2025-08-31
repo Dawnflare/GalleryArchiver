@@ -92,12 +92,13 @@
     try {
       const res = await fetch(url, { mode: 'cors' });
       const blob = await res.blob();
-      return await new Promise((resolve, reject) => {
+      const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
+      return { dataUrl, mime: blob.type };
     } catch {
       return null;
     }
@@ -181,12 +182,16 @@
       const bestNow = video.currentSrc || video.src || (video.querySelector('source')?.src) || initialUrl;
       if (!bestNow) return;
 
-      const dataUrl = await fetchAsDataUrl(absUrl(bestNow));
-      if (!dataUrl) return;
+      const result = await fetchAsDataUrl(absUrl(bestNow));
+      if (!result) return;
 
       const cloneVid = document.createElement('video');
-      cloneVid.src = dataUrl;
       cloneVid.controls = true;
+      cloneVid.preload = 'auto';
+      const source = document.createElement('source');
+      source.src = result.dataUrl;
+      if (result.mime) source.type = result.mime;
+      cloneVid.appendChild(source);
       state.bucket.appendChild(cloneVid);
       cloneVid.load();
       const ok = await finalizeVideo(cloneVid);
@@ -321,13 +326,15 @@
 
   function freezePage() {
     ensureBucket();
-    // In earlier versions we hid the live app and revealed the bucket to create a
-    // static grid for the MHTML export. Now that the browser reliably captures
-    // the full page, keep the app visible and leave the bucket hidden so the
-    // saved archive doesn't include a duplicate grid.
     restoreScrollStyles();
-    // Ensure bucket stays hidden
-    state.bucket.style.display = 'none';
+    // Reveal bucket content for capture
+    state.bucket.style.display = 'grid';
+    state.bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+    state.bucket.style.gap = '8px';
+    // Hide other page content to avoid duplicates
+    document.querySelectorAll('body > *').forEach(el => {
+      if (el !== state.bucket) el.style.display = 'none';
+    });
   }
 
   async function startRunning() {
