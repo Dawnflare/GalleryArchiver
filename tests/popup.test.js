@@ -1,6 +1,7 @@
 document.body.innerHTML = `
   <button id="start"></button>
   <button id="stop"></button>
+  <button id="reset"></button>
   <button id="save"></button>
   <input id="maxItems" />
   <input id="scrollDelay" />
@@ -40,4 +41,12 @@ test('save button triggers page capture and download', async () => {
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
+});
+
+test('reset button sends reset message', async () => {
+  chrome.tabs.sendMessage.mockClear();
+  document.getElementById('reset').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, { type: 'ARCHIVER_RESET', payload: {} });
 });

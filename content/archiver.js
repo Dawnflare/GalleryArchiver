@@ -17,6 +17,8 @@
     lastNewItemAt: 0,
     bucket: null,
     scrollEl: null,
+    origHtmlStyle: '',
+    origBodyStyle: '',
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -132,7 +134,7 @@
       postStats();
       postState();
 
-      if (state.captured >= state.maxItems) stopRunning(true);
+      if (state.captured >= state.maxItems) stopRunning(false, false);
     });
 
     postStats();
@@ -179,7 +181,7 @@
             state.allImageUrls.add(absUrl(url));
             postStats();
             postState();
-            if (state.captured >= state.maxItems) stopRunning(true);
+            if (state.captured >= state.maxItems) stopRunning(false, false);
           });
 
           postStats();
@@ -212,8 +214,10 @@
       const before = state.captured;
       scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
       await new Promise(r => setTimeout(r, state.scrollDelay));
+      if (!state.running) break;
 
       scanOnce();
+      if (!state.running) break;
 
       // If no progress for a while, attempt a small nudge but keep looping
       const now = performance.now();
@@ -222,16 +226,22 @@
       } else if (now - state.lastNewItemAt > 6000) {
         scrollEl.scrollBy(0, 50);
         await new Promise(r => setTimeout(r, state.scrollDelay));
+        if (!state.running) break;
         scanOnce();
       }
     }
   }
 
-  function resetScrollStyles() {
+  function applyScrollStyles() {
     document.documentElement.style.height = 'auto';
     document.documentElement.style.overflowY = 'auto';
     document.body.style.height = 'auto';
     document.body.style.overflowY = 'auto';
+  }
+
+  function restoreScrollStyles() {
+    document.documentElement.setAttribute('style', state.origHtmlStyle);
+    document.body.setAttribute('style', state.origBodyStyle);
   }
 
   function freezePage() {
@@ -240,7 +250,7 @@
     // static grid for the MHTML export. Now that the browser reliably captures
     // the full page, keep the app visible and leave the bucket hidden so the
     // saved archive doesn't include a duplicate grid.
-    resetScrollStyles();
+    restoreScrollStyles();
     // Ensure bucket stays hidden
     state.bucket.style.display = 'none';
   }
@@ -272,17 +282,31 @@
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
-    resetScrollStyles();
+    state.origHtmlStyle = document.documentElement.getAttribute('style') || '';
+    state.origBodyStyle = document.body.getAttribute('style') || '';
+    applyScrollStyles();
     autoScrollLoop();
   }
 
-  function stopRunning(freeze=false) {
+  function stopRunning(freeze=false, restoreStyles=true) {
     state.running = false;
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+    if (state.scrollTimer) {
+      clearTimeout(state.scrollTimer);
+      state.scrollTimer = null;
+    }
+    state.scrollEl = null;
     if (freeze) {
       freezePage();
-    } else if (state.bucket) {
-      state.bucket.remove();
-      state.bucket = null;
+    } else if (restoreStyles) {
+      restoreScrollStyles();
+      if (state.bucket) {
+        state.bucket.remove();
+        state.bucket = null;
+      }
     }
     postState();
   }
@@ -290,6 +314,7 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'ARCHIVER_START') startRunning();
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+    if (msg?.type === 'ARCHIVER_RESET') stopRunning(false);
   });
 
     // Dev helper (console): window.__civitaiArchiverStart()
