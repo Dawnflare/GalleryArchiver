@@ -12,6 +12,7 @@ Brave/Chromium extension to capture Civitai infinite-scroll galleries as a **sin
 ## Notes
 - Works best when you save immediately after stopping (resources stay warm in cache).
 - Default Max items = 100 (you can raise it in the popup).
+- Scroll delay and stability timeout are configurable in the popup (defaults 300ms and 400ms).
 
 ## Roadmap
 - Robust selectors & heuristics for different Civitai gallery layouts.
