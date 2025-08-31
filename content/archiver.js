@@ -7,6 +7,8 @@
     captured: 0,
     deduped: 0,
     maxItems: 100,
+    scrollDelay: 300,
+    stabilityTimeout: 400,
     items: new Map(), // key -> { detailUrl, imageUrl, el, state }
     seenDetailUrls: new Set(), // dedupe by detail link
     allImageUrls: new Set(), // every image destined for archive
@@ -109,7 +111,7 @@
     const initialUrl = pickBestFromSrcset(img) || img.src || '';
 
     // Wait for image attributes to settle before cloning
-    stabilityWatcher(img, 400, async () => {
+    stabilityWatcher(img, state.stabilityTimeout, async () => {
       if (!state.running || state.captured >= state.maxItems) return;
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
       if (!bestNow || isTinyDataURI(bestNow)) return;
@@ -161,7 +163,7 @@
           state.seenDetailUrls.add(detailUrl);
           state.seen++;
 
-          stabilityWatcher(a, 400, async () => {
+          stabilityWatcher(a, state.stabilityTimeout, async () => {
             if (!state.running || state.captured >= state.maxItems) return;
             const cloneImg = document.createElement('img');
             cloneImg.src = url;
@@ -209,7 +211,7 @@
     while (state.running) {
       const before = state.captured;
       scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, state.scrollDelay));
 
       scanOnce();
 
@@ -220,7 +222,7 @@
       } else if (now - state.lastNewItemAt > 6000) {
         // try a stutter scroll
         scrollEl.scrollBy(0, 50);
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, state.scrollDelay));
         scanOnce();
         if (performance.now() - state.lastNewItemAt > 10000) {
           // No new items for 10s — stop
@@ -263,9 +265,11 @@
     state.allImageUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
-      chrome.storage.local.get({ maxItems: 100 }, resolve);
+    chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
     });
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
+    state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
+    state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
     // Collect any images already on the page
     document.querySelectorAll('img').forEach(img => {
       const url = pickBestFromSrcset(img) || img.currentSrc || img.src;

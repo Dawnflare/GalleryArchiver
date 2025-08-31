@@ -9,14 +9,18 @@ async function sendToContent(type, payload={}) {
 }
 
 function restoreOptions() {
-  chrome.storage.local.get({ maxItems: 100 }, (opts) => {
+  chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, (opts) => {
     document.getElementById('maxItems').value = opts.maxItems;
+    document.getElementById('scrollDelay').value = opts.scrollDelay;
+    document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
   });
 }
 
 function saveOptions() {
   const maxItems = parseInt(document.getElementById('maxItems').value || '100', 10);
-  chrome.storage.local.set({ maxItems });
+  const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
+  const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
+  chrome.storage.local.set({ maxItems, scrollDelay, stabilityTimeout });
 }
 
 document.getElementById('start').addEventListener('click', async () => {
