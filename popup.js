@@ -47,6 +47,7 @@ document.getElementById('save').addEventListener('click', async () => {
       filename: `civitai-archive-${ts}.mhtml`,
       saveAs: true
     });
+    chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_STOP' });
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (e) {
     console.error('MHTML save error:', e);

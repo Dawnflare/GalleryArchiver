@@ -17,6 +17,10 @@
     lastNewItemAt: 0,
     bucket: null,
     scrollEl: null,
+    origDocHeight: '',
+    origDocOverflowY: '',
+    origBodyHeight: '',
+    origBodyOverflowY: '',
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -241,11 +245,11 @@
     }
   }
 
-  function resetScrollStyles() {
-    document.documentElement.style.height = 'auto';
-    document.documentElement.style.overflowY = 'auto';
-    document.body.style.height = 'auto';
-    document.body.style.overflowY = 'auto';
+  function restoreScrollStyles() {
+    document.documentElement.style.height = state.origDocHeight || '';
+    document.documentElement.style.overflowY = state.origDocOverflowY || '';
+    document.body.style.height = state.origBodyHeight || '';
+    document.body.style.overflowY = state.origBodyOverflowY || '';
   }
 
   function freezePage() {
@@ -254,7 +258,6 @@
     // static grid for the MHTML export. Now that the browser reliably captures
     // the full page, keep the app visible and leave the bucket hidden so the
     // saved archive doesn't include a duplicate grid.
-    resetScrollStyles();
     // Ensure bucket stays hidden
     state.bucket.style.display = 'none';
   }
@@ -262,6 +265,14 @@
   async function startRunning() {
     if (state.running) return;
     state.running = true;
+    state.origDocHeight = document.documentElement.style.height;
+    state.origDocOverflowY = document.documentElement.style.overflowY;
+    state.origBodyHeight = document.body.style.height;
+    state.origBodyOverflowY = document.body.style.overflowY;
+    document.documentElement.style.height = 'auto';
+    document.documentElement.style.overflowY = 'auto';
+    document.body.style.height = 'auto';
+    document.body.style.overflowY = 'auto';
     state.seen = 0;
     state.captured = 0;
     state.deduped = 0;
@@ -286,7 +297,6 @@
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
-    resetScrollStyles();
     autoScrollLoop();
   }
 
@@ -298,6 +308,7 @@
       state.bucket.remove();
       state.bucket = null;
     }
+    restoreScrollStyles();
     postState();
   }
 

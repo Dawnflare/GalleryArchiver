@@ -36,9 +36,11 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await new Promise(r => setTimeout(r, 0));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
+  expect(chrome.tabs.sendMessage).toHaveBeenLastCalledWith(123, { type: 'ARCHIVER_STOP' });
 });
