@@ -44,6 +44,7 @@ document.getElementById('reset').addEventListener('click', async () => {
 document.getElementById('save').addEventListener('click', async () => {
   const tab = await getActiveTab();
   try {
+    await sendToContent('ARCHIVER_STOP');
     const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
     // Explicitly set the MIME type so the download uses an .mhtml extension
     const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
@@ -57,15 +58,15 @@ document.getElementById('save').addEventListener('click', async () => {
     const onChanged = delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
-        sendToContent('ARCHIVER_STOP');
+        sendToContent('ARCHIVER_UNFREEZE');
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       }
     };
     if (chrome.downloads.onChanged?.addListener) {
       chrome.downloads.onChanged.addListener(onChanged);
     } else {
-      // Fallback: immediately stop if downloads API events unavailable
-      sendToContent('ARCHIVER_STOP');
+      // Fallback: immediately unfreeze if downloads API events unavailable
+      sendToContent('ARCHIVER_UNFREEZE');
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
   } catch (e) {

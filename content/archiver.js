@@ -20,6 +20,7 @@
     origHtmlStyle: '',
     origBodyStyle: '',
     debug: false,
+    hiddenEls: [],
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -212,6 +213,7 @@
         cloneVid.remove();
         return;
       }
+      if (state.debug) console.debug('video ready', detailUrl);
 
       state.captured++;
       state.deduped = state.seenDetailUrls.size;
@@ -344,9 +346,12 @@
     state.bucket.style.display = 'grid';
     state.bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
     state.bucket.style.gap = '8px';
-    // Hide other page content to avoid duplicates
+    // Hide other page content to avoid duplicates but remember original styles
+    state.hiddenEls = [];
     document.querySelectorAll('body > *').forEach(el => {
-      if (el !== state.bucket) el.style.display = 'none';
+      if (el === state.bucket) return;
+      state.hiddenEls.push({ el, display: el.style.display });
+      el.style.display = 'none';
     });
   }
 
@@ -403,6 +408,11 @@
       freezePage();
     } else if (restoreStyles) {
       restoreScrollStyles();
+      // Restore hidden elements
+      state.hiddenEls.forEach(({ el, display }) => {
+        el.style.display = display;
+      });
+      state.hiddenEls = [];
       if (state.bucket) {
         state.bucket.remove();
         state.bucket = null;
@@ -414,6 +424,7 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'ARCHIVER_START') startRunning();
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+    if (msg?.type === 'ARCHIVER_UNFREEZE') stopRunning(false);
     if (msg?.type === 'ARCHIVER_RESET') {
       stopRunning(false);
       sendResponse();
