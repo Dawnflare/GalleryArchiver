@@ -212,8 +212,10 @@
       const before = state.captured;
       scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
       await new Promise(r => setTimeout(r, state.scrollDelay));
+      if (!state.running) break;
 
       scanOnce();
+      if (!state.running) break;
 
       // If no progress for a while, attempt a small nudge but keep looping
       const now = performance.now();
@@ -222,6 +224,7 @@
       } else if (now - state.lastNewItemAt > 6000) {
         scrollEl.scrollBy(0, 50);
         await new Promise(r => setTimeout(r, state.scrollDelay));
+        if (!state.running) break;
         scanOnce();
       }
     }
@@ -278,11 +281,23 @@
 
   function stopRunning(freeze=false) {
     state.running = false;
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+    if (state.scrollTimer) {
+      clearTimeout(state.scrollTimer);
+      state.scrollTimer = null;
+    }
+    state.scrollEl = null;
     if (freeze) {
       freezePage();
-    } else if (state.bucket) {
-      state.bucket.remove();
-      state.bucket = null;
+    } else {
+      resetScrollStyles();
+      if (state.bucket) {
+        state.bucket.remove();
+        state.bucket = null;
+      }
     }
     postState();
   }

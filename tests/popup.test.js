@@ -42,3 +42,11 @@ test('save button triggers page capture and download', async () => {
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
 });
+
+test('reset button sends reset message', async () => {
+  chrome.tabs.sendMessage.mockClear();
+  document.getElementById('reset').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, { type: 'ARCHIVER_RESET', payload: {} });
+});

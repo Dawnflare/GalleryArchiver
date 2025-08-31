@@ -35,8 +35,7 @@ document.getElementById('stop').addEventListener('click', async () => {
 });
 
 document.getElementById('reset').addEventListener('click', async () => {
-  const tab = await getActiveTab();
-  chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_RESET' });
+  sendToContent('ARCHIVER_RESET');
 });
 
 document.getElementById('save').addEventListener('click', async () => {
