@@ -35,7 +35,8 @@ document.getElementById('stop').addEventListener('click', async () => {
 });
 
 document.getElementById('reset').addEventListener('click', async () => {
-  sendToContent('ARCHIVER_RESET');
+  await sendToContent('ARCHIVER_RESET');
+  chrome.runtime.reload();
 });
 
 document.getElementById('save').addEventListener('click', async () => {
