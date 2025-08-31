@@ -17,6 +17,8 @@
     lastNewItemAt: 0,
     bucket: null,
     scrollEl: null,
+    origHtmlStyle: '',
+    origBodyStyle: '',
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -230,11 +232,16 @@
     }
   }
 
-  function resetScrollStyles() {
+  function applyScrollStyles() {
     document.documentElement.style.height = 'auto';
     document.documentElement.style.overflowY = 'auto';
     document.body.style.height = 'auto';
     document.body.style.overflowY = 'auto';
+  }
+
+  function restoreScrollStyles() {
+    document.documentElement.setAttribute('style', state.origHtmlStyle);
+    document.body.setAttribute('style', state.origBodyStyle);
   }
 
   function freezePage() {
@@ -243,7 +250,7 @@
     // static grid for the MHTML export. Now that the browser reliably captures
     // the full page, keep the app visible and leave the bucket hidden so the
     // saved archive doesn't include a duplicate grid.
-    resetScrollStyles();
+    restoreScrollStyles();
     // Ensure bucket stays hidden
     state.bucket.style.display = 'none';
   }
@@ -275,7 +282,9 @@
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
-    resetScrollStyles();
+    state.origHtmlStyle = document.documentElement.getAttribute('style') || '';
+    state.origBodyStyle = document.body.getAttribute('style') || '';
+    applyScrollStyles();
     autoScrollLoop();
   }
 
@@ -293,7 +302,7 @@
     if (freeze) {
       freezePage();
     } else {
-      resetScrollStyles();
+      restoreScrollStyles();
       if (state.bucket) {
         state.bucket.remove();
         state.bucket = null;
