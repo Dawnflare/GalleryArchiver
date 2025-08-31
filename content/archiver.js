@@ -134,7 +134,7 @@
       postStats();
       postState();
 
-      if (state.captured >= state.maxItems) stopRunning(true);
+      if (state.captured >= state.maxItems) stopRunning(false, false);
     });
 
     postStats();
@@ -181,7 +181,7 @@
             state.allImageUrls.add(absUrl(url));
             postStats();
             postState();
-            if (state.captured >= state.maxItems) stopRunning(true);
+            if (state.captured >= state.maxItems) stopRunning(false, false);
           });
 
           postStats();
@@ -288,7 +288,7 @@
     autoScrollLoop();
   }
 
-  function stopRunning(freeze=false) {
+  function stopRunning(freeze=false, restoreStyles=true) {
     state.running = false;
     if (state.observer) {
       state.observer.disconnect();
@@ -301,7 +301,7 @@
     state.scrollEl = null;
     if (freeze) {
       freezePage();
-    } else {
+    } else if (restoreStyles) {
       restoreScrollStyles();
       if (state.bucket) {
         state.bucket.remove();
