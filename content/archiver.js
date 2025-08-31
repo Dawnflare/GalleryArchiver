@@ -9,6 +9,7 @@
     maxItems: 100,
     items: new Map(), // key -> { detailUrl, imageUrl, el, state }
     seenDetailUrls: new Set(), // dedupe by detail link
+    allImageUrls: new Set(), // every image destined for archive
     observer: null,
     scrollTimer: null,
     lastNewItemAt: 0,
@@ -38,7 +39,17 @@
       type: 'ARCHIVER_STATS',
       seen: state.seen,
       captured: state.captured,
-      deduped: state.deduped
+      deduped: state.deduped,
+      total: state.allImageUrls.size
+    });
+  }
+
+  function postState() {
+    chrome.runtime.sendMessage({
+      type: 'ARCHIVER_STATE',
+      running: state.running,
+      captured: state.captured,
+      maxItems: state.maxItems
     });
   }
 
@@ -115,7 +126,9 @@
       state.captured++;
       state.deduped = state.seenDetailUrls.size;
       state.lastNewItemAt = performance.now();
+      state.allImageUrls.add(absUrl(bestNow));
       postStats();
+      postState();
 
       if (state.captured >= state.maxItems) stopRunning(true);
     });
@@ -161,7 +174,9 @@
             state.captured++;
             state.deduped = state.seenDetailUrls.size;
             state.lastNewItemAt = performance.now();
+            state.allImageUrls.add(absUrl(url));
             postStats();
+            postState();
             if (state.captured >= state.maxItems) stopRunning(true);
           });
 
@@ -241,11 +256,23 @@
   async function startRunning() {
     if (state.running) return;
     state.running = true;
+    state.seen = 0;
+    state.captured = 0;
+    state.deduped = 0;
+    state.seenDetailUrls.clear();
+    state.allImageUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
       chrome.storage.local.get({ maxItems: 100 }, resolve);
     });
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
+    // Collect any images already on the page
+    document.querySelectorAll('img').forEach(img => {
+      const url = pickBestFromSrcset(img) || img.currentSrc || img.src;
+      if (url) state.allImageUrls.add(absUrl(url));
+    });
+    postStats();
+    postState();
     ensureBucket();
     startObserver();
     state.scrollEl = getScrollElement();
@@ -262,6 +289,7 @@
       state.bucket.remove();
       state.bucket = null;
     }
+    postState();
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

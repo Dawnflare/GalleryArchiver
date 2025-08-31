@@ -50,6 +50,7 @@ document.getElementById('save').addEventListener('click', async () => {
 });
 
 restoreOptions();
+document.getElementById('status').textContent = '';
 
 // Live stats
 chrome.runtime.onMessage.addListener((msg, sender) => {
@@ -57,5 +58,20 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     document.getElementById('seen').textContent = String(msg.seen ?? 0);
     document.getElementById('captured').textContent = String(msg.captured ?? 0);
     document.getElementById('deduped').textContent = String(msg.deduped ?? 0);
+    document.getElementById('total').textContent = String(msg.total ?? 0);
+  }
+  if (msg?.type === 'ARCHIVER_STATE') {
+    const progress = document.getElementById('progress');
+    progress.max = msg.maxItems ?? 0;
+    progress.value = msg.captured ?? 0;
+    const statusEl = document.getElementById('status');
+    const saveBtn = document.getElementById('save');
+    if (msg.running) {
+      statusEl.textContent = 'Capturing...';
+      saveBtn.disabled = true;
+    } else {
+      statusEl.textContent = 'Ready to Save';
+      saveBtn.disabled = false;
+    }
   }
 });

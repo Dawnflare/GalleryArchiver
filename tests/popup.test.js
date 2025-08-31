@@ -6,6 +6,9 @@ document.body.innerHTML = `
   <span id="seen"></span>
   <span id="captured"></span>
   <span id="deduped"></span>
+  <span id="total"></span>
+  <progress id="progress"></progress>
+  <div id="status"></div>
 `;
 
 global.URL.createObjectURL = jest.fn(() => 'blob:fake');
@@ -25,6 +28,7 @@ global.chrome = {
 require('../popup.js');
 
 test('save button triggers page capture and download', async () => {
+  document.getElementById('save').disabled = false;
   document.getElementById('save').click();
   // Wait microtasks for async handlers
   await Promise.resolve();
