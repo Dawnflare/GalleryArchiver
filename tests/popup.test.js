@@ -25,7 +25,7 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() } }
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() }
 };
 
 require('../popup.js');
@@ -43,10 +43,9 @@ test('save button triggers page capture and download', async () => {
   expect(chrome.downloads.download).toHaveBeenCalled();
 });
 
-test('reset button sends reset message', async () => {
-  chrome.tabs.sendMessage.mockClear();
+test('reset button reloads the extension', async () => {
+  chrome.runtime.reload.mockClear();
   document.getElementById('reset').click();
   await Promise.resolve();
-  await Promise.resolve();
-  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, { type: 'ARCHIVER_RESET', payload: {} });
+  expect(chrome.runtime.reload).toHaveBeenCalled();
 });
