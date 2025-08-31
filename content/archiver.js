@@ -19,6 +19,7 @@
     scrollEl: null,
     origHtmlStyle: '',
     origBodyStyle: '',
+    debug: false,
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -90,6 +91,7 @@
 
   async function fetchAsDataUrl(url) {
     try {
+      if (state.debug) console.debug('fetchAsDataUrl', url);
       const res = await fetch(url, { mode: 'cors', credentials: 'include' });
       const blob = await res.blob();
       const dataUrl = await new Promise((resolve, reject) => {
@@ -98,8 +100,10 @@
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
+      if (state.debug) console.debug('fetchAsDataUrl success', url, blob.type, blob.size);
       return { dataUrl, mime: blob.type };
-    } catch {
+    } catch (err) {
+      if (state.debug) console.warn('fetchAsDataUrl failed', url, err);
       return null;
     }
   }
@@ -109,7 +113,10 @@
       const done = () => resolve(true);
       if (videoEl.readyState >= 2) return done(); // HAVE_CURRENT_DATA
       videoEl.addEventListener('loadeddata', done, { once: true });
-      videoEl.addEventListener('error', () => resolve(false), { once: true });
+      videoEl.addEventListener('error', (e) => {
+        if (state.debug) console.warn('video load error', e);
+        resolve(false);
+      }, { once: true });
     });
   }
 
@@ -181,9 +188,13 @@
       if (!state.running || state.captured >= state.maxItems) return;
       const bestNow = video.currentSrc || video.src || (video.querySelector('source')?.src) || initialUrl;
       if (!bestNow) return;
+      if (state.debug) console.debug('processAnchorVideo', { detailUrl, bestNow });
 
       const result = await fetchAsDataUrl(absUrl(bestNow));
-      if (!result) return;
+      if (!result) {
+        if (state.debug) console.warn('video fetch failed', bestNow);
+        return;
+      }
 
       const cloneVid = document.createElement('video');
       cloneVid.controls = true;
@@ -197,6 +208,7 @@
       cloneVid.load();
       const ok = await finalizeVideo(cloneVid);
       if (!ok || !state.running) {
+        if (state.debug) console.warn('video not ready', detailUrl);
         cloneVid.remove();
         return;
       }
@@ -348,11 +360,12 @@
     state.allMediaUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
-    chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
+    chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400, debug: false }, resolve);
     });
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
+    state.debug = !!opts.debug;
     // Collect any media already on the page
     document.querySelectorAll('img').forEach(img => {
       const url = pickBestFromSrcset(img) || img.currentSrc || img.src;
@@ -410,6 +423,7 @@
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
+    window.__civitaiArchiverDebug = (flag=true) => { state.debug = !!flag; console.log('archiver debug', state.debug); };
 
     if (typeof module !== 'undefined' && module.exports) {
       module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI };
