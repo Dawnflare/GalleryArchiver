@@ -30,7 +30,6 @@ global.chrome = {
 require('../popup.js');
 
 test('save button triggers page capture and download', async () => {
-  document.getElementById('save').disabled = false;
   document.getElementById('save').click();
   // Wait microtasks for async handlers
   await Promise.resolve();

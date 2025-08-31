@@ -215,28 +215,14 @@
 
       scanOnce();
 
-      // If no progress for a while, attempt a nudge; break if truly stalled
+      // If no progress for a while, attempt a small nudge but keep looping
       const now = performance.now();
       if (state.captured > before) {
         state.lastNewItemAt = now;
       } else if (now - state.lastNewItemAt > 6000) {
-        // try a stutter scroll
         scrollEl.scrollBy(0, 50);
         await new Promise(r => setTimeout(r, state.scrollDelay));
         scanOnce();
-        if (performance.now() - state.lastNewItemAt > 10000) {
-          // No new items for 10s — stop
-          stopRunning(true);
-          break;
-        }
-      }
-
-      const canScroll = (scrollEl.scrollHeight - scrollEl.clientHeight) > 100;
-      const nearBottom = (scrollEl.scrollTop + scrollEl.clientHeight) >= (scrollEl.scrollHeight - 50);
-      if (canScroll && nearBottom) {
-        // likely end of page
-        stopRunning(true);
-        break;
       }
     }
   }

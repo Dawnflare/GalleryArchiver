@@ -42,12 +42,25 @@ document.getElementById('save').addEventListener('click', async () => {
     const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
     const url = URL.createObjectURL(blob);
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    await chrome.downloads.download({
+    const downloadId = await chrome.downloads.download({
       url,
       filename: `civitai-archive-${ts}.mhtml`,
       saveAs: true
     });
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    const onChanged = delta => {
+      if (delta.id === downloadId && delta.state?.current === 'complete') {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        sendToContent('ARCHIVER_STOP');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    };
+    if (chrome.downloads.onChanged?.addListener) {
+      chrome.downloads.onChanged.addListener(onChanged);
+    } else {
+      // Fallback: immediately stop if downloads API events unavailable
+      sendToContent('ARCHIVER_STOP');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   } catch (e) {
     console.error('MHTML save error:', e);
   }
@@ -69,13 +82,10 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     progress.max = msg.maxItems ?? 0;
     progress.value = msg.captured ?? 0;
     const statusEl = document.getElementById('status');
-    const saveBtn = document.getElementById('save');
     if (msg.running) {
       statusEl.textContent = 'Capturing...';
-      saveBtn.disabled = true;
     } else {
       statusEl.textContent = 'Ready to Save';
-      saveBtn.disabled = false;
     }
   }
 });
