@@ -1,20 +1,27 @@
-# Civitai Gallery Archiver (Core)
+# Civitai Gallery Archiver
 
-Brave/Chromium extension to capture Civitai infinite-scroll galleries as a **single MHTML** file.  
-**Core-only**: MHTML exporter, no enrichment, default max items = 100 for fast iteration.
+Brave/Chromium extension that hoards Civitai infinite‑scroll galleries and saves them as a **single MHTML** file.
+
+## Features
+- **Autoscroll capture** – start the extension and it automatically scrolls through the gallery, collecting high‑resolution images until the limit is reached or you stop it.
+- **Start / Stop / Save / Reset** controls in the popup:
+  - **Start** begins capturing and displays live stats (seen, captured, deduped) with a progress bar.
+  - **Stop** freezes the page so it can be exported.
+  - **Save** downloads the page as an `.mhtml` archive.
+  - **Reset** clears all state, reloads the page, and restarts the extension.
+- **Configurable options** – set maximum items, scroll delay, and stability timeout directly in the popup.
 
 ## Install (dev)
-1. Open Brave → `brave://extensions/` → toggle **Developer mode** (top-right).
-2. Click **Load unpacked** → select this folder (`civitai-gallery-archiver/`).
-3. Pin the extension. Open a Civitai gallery page.
-4. Click the toolbar icon → **Start** to capture; **Stop**; **Save as MHTML**.
+1. Open Brave → `brave://extensions/` and enable **Developer mode** (top‑right).
+2. Click **Load unpacked** and select this folder (`civitai-gallery-archiver/`).
+3. Pin the extension, open a Civitai gallery page, and use the popup controls.
 
 ## Notes
 - Works best when you save immediately after stopping (resources stay warm in cache).
-- Default Max items = 100 (you can raise it in the popup).
-- Scroll delay and stability timeout are configurable in the popup (defaults 300ms and 400ms).
+- Defaults: max items = 100, scroll delay = 300 ms, stability timeout = 400 ms.
+- Change these values in the popup before pressing **Start**.
 
 ## Roadmap
 - Robust selectors & heuristics for different Civitai gallery layouts.
 - Size warnings for very large captures.
-- Optional single-HTML exporter (later).
+- Optional single‑HTML exporter (later).
