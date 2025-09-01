@@ -441,21 +441,20 @@
 })();
 
 /* ------------------------------------------------------------------
- * [Archiver] scope gallery layout to #gallery + video play badge
- *  - Applies grid only inside #gallery (no header stretch)
- *  - Adds a small ▶ badge on stills that replaced videos
- *  - Cleans up when ARCHIVER_STOP fires
+ * [Archiver] Scope gallery layout to #gallery + bake ▶ onto video stills
+ *  - Applies 6-col grid only inside #gallery (header/description unchanged)
+ *  - On ARCHIVER_PREPARE_FOR_SAVE: draws a play glyph into the pixels of
+ *    any video snapshot image so the icon survives in saved MHTML
+ *  - Cleans up injected layout style when ARCHIVER_STOP fires
  * ------------------------------------------------------------------ */
 (function () {
   const STYLE_ID_GRID  = 'archiver-gallery-grid-style';
-  const STYLE_ID_BADGE = 'archiver-video-badge-style';
-  const ATTR_IS_VIDEO  = 'data-archiver-video';
 
   const $  = (sel, root=document) => root.querySelector(sel);
   const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
   function getGalleryRoot() {
-    // Prefer the explicit id the site uses
+    // Prefer explicit id the site uses
     const g = document.getElementById('gallery');
     if (g) return g;
 
@@ -482,7 +481,7 @@
     const s = document.createElement('style');
     s.id = STYLE_ID_GRID;
 
-    // IMPORTANT: All rules are hard-scoped under #gallery so the header doesn’t change.
+    // IMPORTANT: All rules are hard-scoped under #gallery so header/description don’t change.
     s.textContent = `
       /* keep the gallery container full width without touching header */
       #gallery .mantine-Container-root,
@@ -500,84 +499,85 @@
         grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
         gap: 12px !important;
       }
-
-      /* play badge basics (actual element is inserted by JS below) */
-      a[${ATTR_IS_VIDEO}] { position: relative !important; }
     `;
     document.head.appendChild(s);
-  }
-
-  function ensureBadgeStyles() {
-    if (document.getElementById(STYLE_ID_BADGE)) return;
-    const s = document.createElement('style');
-    s.id = STYLE_ID_BADGE;
-    s.textContent = `
-      a[${ATTR_IS_VIDEO}] .archiver-badge {
-        position: absolute;
-        right: 8px; top: 8px;
-        width: 0; height: 0;
-        border-left: 12px solid #fff;               /* ▶ */
-        border-top: 8px solid transparent;
-        border-bottom: 8px solid transparent;
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,.6));
-        opacity: .95; z-index: 2147483000;
-        pointer-events: none;
-      }
-    `;
-    document.head.appendChild(s);
-  }
-
-  function addPlayBadges(galleryRoot) {
-    if (!galleryRoot) return;
-
-    // Stills we generate for videos are data: URLs and/or use alt="Video snapshot"
-    const candidates = $$(
-      'a[href*="/images/"]',
-      galleryRoot
-    ).filter(a =>
-      a.querySelector('img[src^="data:image/"]') ||
-      a.querySelector('img[alt="Video snapshot"]')
-    );
-
-    for (const a of candidates) {
-      if (a.hasAttribute(ATTR_IS_VIDEO)) continue;
-      a.setAttribute(ATTR_IS_VIDEO, '');
-      const badge = document.createElement('span');
-      badge.className = 'archiver-badge';
-      a.appendChild(badge);
-    }
   }
 
   function cleanup() {
     const s1 = document.getElementById(STYLE_ID_GRID);
-    const s2 = document.getElementById(STYLE_ID_BADGE);
     if (s1) s1.remove();
-    if (s2) s2.remove();
-    $$(`a[${ATTR_IS_VIDEO}]`).forEach(a => {
-      a.removeAttribute(ATTR_IS_VIDEO);
-      const b = a.querySelector('.archiver-badge'); if (b) b.remove();
-    });
   }
 
-  async function prepareScopedLayoutAndBadges() {
-    const root = getGalleryRoot();
-    ensureGridStyles(root);
-    ensureBadgeStyles();
-    addPlayBadges(root);
-    // tiny settle for paint
-    await new Promise(r => setTimeout(r, 30));
-    return { ok: true };
+  /* -------------------------- Play glyph baking -------------------------- */
+  function drawPlayOnCanvas(imgEl) {
+    // Use displayed size to keep output small and crisp
+    const rect    = imgEl.getBoundingClientRect();
+    const dispW   = Math.max(1, Math.round(rect.width  || imgEl.naturalWidth  || 450));
+    const dispH   = Math.max(1, Math.round(rect.height || imgEl.naturalHeight || 450));
+
+    const c = document.createElement('canvas');
+    c.width = dispW; c.height = dispH;
+    const ctx = c.getContext('2d');
+    try { ctx.drawImage(imgEl, 0, 0, dispW, dispH); } catch (_) { return null; }
+
+    // Badge geometry (top-right)
+    const d   = Math.round(Math.min(dispW, dispH) * 0.12); // circle radius
+    const pad = Math.max(6, Math.round(d * 0.5));
+    const cx  = dispW - pad - d, cy = pad + d;
+
+    // Dark translucent circle
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.beginPath(); ctx.arc(cx, cy, d, 0, Math.PI*2); ctx.fill();
+
+    // White play triangle
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(cx - d * 0.5, cy - d * 0.65);
+    ctx.lineTo(cx - d * 0.5, cy + d * 0.65);
+    ctx.lineTo(cx + d * 0.6,  cy);
+    ctx.closePath(); ctx.fill();
+
+    // JPEG keeps sizes small and blends with photo content
+    return c.toDataURL('image/jpeg', 0.9);
   }
 
-  // Hook into the existing PREPARE call used by background.js before saving
+  async function bakePlayGlyphs(root) {
+    if (!root) return { ok:true, baked:0 };
+
+    // Heuristic: our video stills are data URLs and/or marked by alt text
+    const imgs = $$('a[href*="/images/"] img', root).filter(img =>
+      (img.src && img.src.startsWith('data:image/')) || /Video snapshot/i.test(img.alt || '')
+    ).filter(img => !img.dataset.archiverPlayMarked);
+
+    let baked = 0;
+    for (const img of imgs) {
+      const url = drawPlayOnCanvas(img);
+      if (url) {
+        img.src = url;
+        img.dataset.archiverPlayMarked = '1';
+        baked++;
+      }
+    }
+    return { ok:true, baked };
+  }
+
+  /* ------------------------- Message integration ------------------------- */
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg) return;
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
-        try { sendResponse(await prepareScopedLayoutAndBadges()); }
-        catch (e) { sendResponse({ ok:false, error:String(e) }); }
+        try {
+          const root = getGalleryRoot();
+          ensureGridStyles(root);
+          const res = await bakePlayGlyphs(root);
+          // tiny settle for paint
+          await new Promise(r => setTimeout(r, 30));
+          sendResponse(Object.assign({ ok:true }, res));
+        } catch (e) {
+          sendResponse({ ok:false, error:String(e) });
+        }
       })();
-      return true;
+      return true; // async
     }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
