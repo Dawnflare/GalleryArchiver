@@ -21,50 +21,69 @@
     origBodyStyle: '',
   };
 
-    const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
-    const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
-    // New selector for videos inside the same gallery anchors:
-    const SEL_ANCHOR_VIDEO = 'a[href*="/images/"] video, a[href^="/images/"] video';
+  const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
+  const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
 
-    function absUrl(href) {
-      try { return new URL(href, location.origin).toString(); } catch { return href; }
+  // IMPORTANT: On Civitai, the <a href="/images/..."> is often a sibling of <video> (not an ancestor).
+  // So querying 'a ... video' misses them. We query all videos and then keep only those
+  // that have a nearby /images/ anchor in the same card container.
+  const SEL_ANCHOR_VIDEO = 'video';
+
+  function absUrl(href) {
+    try { return new URL(href, location.origin).toString(); } catch { return href; }
+  }
+
+  // Walk up to find a nearby /images/ anchor in the same card subtree
+  function findNearbyDetailAnchor(el) {
+    let node = el;
+    for (let depth = 0; node && depth < 6; depth++) {
+      const a = node.querySelector && node.querySelector('a[href*="/images/"], a[href^="/images/"]');
+      if (a) return a;
+      node = node.parentElement;
     }
-
-    // --- Helpers ---
-    function blobToDataURL(blob) {
-      return new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onloadend = () => resolve(fr.result);
-        fr.onerror = reject;
-        fr.readAsDataURL(blob);
-      });
+    // Fallback: check siblings in the immediate parent container
+    const p = el.parentElement;
+    if (p) {
+      const a = p.querySelector && p.querySelector('a[href*="/images/"], a[href^="/images/"]');
+      if (a) return a;
     }
+    return null;
+  }
 
-    // Return BOTH data URL and the MIME type we actually got back.
-    async function fetchAsDataURLWithType(url) {
-      const r = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'force-cache' });
-      if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
-      const b = await r.blob();
-      const dataUrl = await blobToDataURL(b);
-      return { dataUrl, mime: b.type || '' };
-    }
+  // --- Helpers ---
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onloadend = () => resolve(fr.result);
+      fr.onerror = reject;
+      fr.readAsDataURL(blob);
+    });
+  }
 
-    // Prefer WEBM if available, else MP4, else currentSrc/src.
-    function findPreferredVideoSource(videoEl) {
-      const sources = [...videoEl.querySelectorAll('source')];
-      const byType = (t) => sources.find(s => (s.type || '').toLowerCase() === t)?.src;
-      const byExt  = (re) => sources.map(s => s.src).find(u => re.test(u || ''));
+  // Return BOTH data URL and the MIME type we actually got back.
+  async function fetchAsDataURLWithType(url) {
+    const r = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'force-cache' });
+    if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
+    const b = await r.blob();
+    const dataUrl = await blobToDataURL(b);
+    return { dataUrl, mime: b.type || '' };
+  }
 
-      return (
-        byType('video/webm') ||
-        byExt(/\.webm($|\?)/i) ||
-        byType('video/mp4') ||
-        byExt(/\.mp4($|\?)/i) ||
-        videoEl.currentSrc ||
-        videoEl.src ||
-        null
-      );
-    }
+  // Prefer WEBM if available, else MP4, else currentSrc/src.
+  function findPreferredVideoSource(videoEl) {
+    const sources = [...videoEl.querySelectorAll('source')];
+    const byType = (t) => sources.find(s => (s.type || '').toLowerCase() === t)?.src;
+    const byExt  = (re) => sources.map(s => s.src).find(u => re.test(u || ''));
+    return (
+      byType('video/webm') ||
+      byExt(/\.webm($|\?)/i) ||
+      byType('video/mp4') ||
+      byExt(/\.mp4($|\?)/i) ||
+      videoEl.currentSrc ||
+      videoEl.src ||
+      null
+    );
+  }
 
   function ensureBucket() {
     if (!state.bucket) {
@@ -115,7 +134,6 @@
   }
 
   // Ensure an image element is fully loaded
-
   function finalizeIfGood(imgEl) {
     return new Promise((resolve) => {
       const done = () => resolve(true);
@@ -282,91 +300,82 @@
     document.body.setAttribute('style', state.origBodyStyle);
   }
 
-    function freezePage() {
-      ensureBucket();
-      // In earlier versions we hid the live app and revealed the bucket to create a
-      // static grid for the MHTML export. Now that the browser reliably captures
-      // the full page, keep the app visible and leave the bucket hidden so the
-      // saved archive doesn't include a duplicate grid.
-      restoreScrollStyles();
-      // Ensure bucket stays hidden
-      state.bucket.style.display = 'none';
-    }
+  function freezePage() {
+    ensureBucket();
+    // Keep app visible; bucket hidden so we don't double-render in the archive
+    restoreScrollStyles();
+    state.bucket.style.display = 'none';
+  }
 
-    async function inlineSingleVideoBinary(videoEl, { inlinePoster = true } = {}) {
-      try {
-        const srcUrl = findPreferredVideoSource(videoEl);
-        if (!srcUrl) return { ok: false, reason: 'no-src' };
+  async function inlineSingleVideoBinary(videoEl, { inlinePoster = true } = {}) {
+    try {
+      const srcUrl = findPreferredVideoSource(videoEl);
+      if (!srcUrl) return { ok: false, reason: 'no-src' };
 
-        // Fetch the video bytes and get the true MIME (CDN may return mp4 even for .webm path)
-        const { dataUrl, mime } = await fetchAsDataURLWithType(srcUrl);
+      // Fetch the video bytes and get the true MIME (CDN may return mp4 even for .webm path)
+      const { dataUrl, mime } = await fetchAsDataURLWithType(srcUrl);
 
-        // Poster is optional; inlining improves first frame offline
-        let posterAttr = videoEl.poster || null;
-        if (inlinePoster && posterAttr) {
-          try {
-            const poster = await fetchAsDataURLWithType(posterAttr);
-            posterAttr = poster.dataUrl;
-          } catch {
-            /* keep original poster URL if inline fails */
-          }
-        }
-
-        // Build replacement <video> that autoplays + loops offline (muted is required for autoplay)
-        const nv = document.createElement('video');
-        nv.muted = true;
-        nv.loop = true;
-        nv.autoplay = true;
-        nv.playsInline = true;
-        nv.setAttribute('playsinline', '');
-        nv.setAttribute('preload', 'auto');
-
-        // Preserve layout/appearance
-        if (videoEl.getAttribute('style')) nv.setAttribute('style', videoEl.getAttribute('style'));
-        if (videoEl.className) nv.className = videoEl.className;
-        if (posterAttr) nv.setAttribute('poster', posterAttr);
-
-        // Ensure boolean attributes are present so MHTML preserves autoplay/loop/muted
-        nv.setAttribute('muted', '');
-        nv.setAttribute('autoplay', '');
-        nv.setAttribute('loop', '');
-
-        // Set src directly on the <video> for reliability with data: URIs
-        nv.src = dataUrl;
-
-        // Nudge load/play on the live page (optional, no-ops in MHTML)
-        try { nv.load(); } catch (e) {}
-        try { const p = nv.play(); if (p && p.catch) p.catch(()=>{}); } catch (e) {}
-
-        videoEl.replaceWith(nv);
-        return { ok: true };
-      } catch (err) {
-        console.error('inlineSingleVideoBinary failed', err);
-        return { ok: false, reason: String(err) };
-      }
-    }
-
-    async function inlineVideosForSnapshot(maxConcurrent = 3) {
-      const videos = [...document.querySelectorAll(SEL_ANCHOR_VIDEO)]
-        .filter(v => v.closest('a[href*="/images/"], a[href^="/images/"]'));
-
-      let i = 0, inlined = 0, failed = 0;
-
-      async function worker() {
-        while (i < videos.length) {
-          const v = videos[i++];
-          try {
-            const res = await inlineSingleVideoBinary(v, { inlinePoster: true });
-            if (res.ok) inlined++; else failed++;
-          } catch {
-            failed++;
-          }
+      // Poster is optional; inlining improves first frame offline
+      let posterAttr = videoEl.poster || null;
+      if (inlinePoster && posterAttr) {
+        try {
+          const poster = await fetchAsDataURLWithType(posterAttr);
+          posterAttr = poster.dataUrl;
+        } catch {
+          /* keep original poster URL if inline fails */
         }
       }
 
-      await Promise.all(Array(Math.min(maxConcurrent, videos.length)).fill(0).map(() => worker()));
-      return { total: videos.length, inlined, failed };
+      // Build replacement <video> that autoplays + loops offline
+      const nv = document.createElement('video');
+      // Set BOTH properties (live) and attributes (persisted to MHTML)
+      nv.muted = true;                       nv.setAttribute('muted', '');
+      nv.loop = true;                        nv.setAttribute('loop', '');
+      nv.autoplay = true;                    nv.setAttribute('autoplay', '');
+      nv.playsInline = true;                 nv.setAttribute('playsinline', '');
+      nv.setAttribute('preload', 'auto');
+
+      // Preserve layout/appearance
+      if (videoEl.getAttribute('style')) nv.setAttribute('style', videoEl.getAttribute('style'));
+      if (videoEl.className) nv.className = videoEl.className;
+      if (posterAttr) nv.setAttribute('poster', posterAttr);
+
+      // Assign the data URI directly
+      nv.src = dataUrl;
+
+      try { nv.load(); } catch (_) {}
+      try { const p = nv.play(); if (p && p.catch) p.catch(()=>{}); } catch (_) {}
+
+      videoEl.replaceWith(nv);
+      return { ok: true };
+    } catch (err) {
+      console.error('inlineSingleVideoBinary failed', err);
+      return { ok: false, reason: String(err) };
     }
+  }
+
+  async function inlineVideosForSnapshot(maxConcurrent = 3) {
+    // Discover videos broadly, keep only those with a nearby /images/ anchor
+    const videos = [...document.querySelectorAll(SEL_ANCHOR_VIDEO)]
+      .filter(v => !!findNearbyDetailAnchor(v));
+
+    let i = 0, inlined = 0, failed = 0;
+
+    async function worker() {
+      while (i < videos.length) {
+        const v = videos[i++];
+        try {
+          const res = await inlineSingleVideoBinary(v, { inlinePoster: true });
+          if (res.ok) inlined++; else failed++;
+        } catch {
+          failed++;
+        }
+      }
+    }
+
+    await Promise.all(Array(Math.min(maxConcurrent, videos.length)).fill(0).map(() => worker()));
+    return { total: videos.length, inlined, failed };
+  }
 
   async function startRunning() {
     if (state.running) return;
@@ -378,7 +387,7 @@
     state.allImageUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
-    chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
+      chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
     });
     state.maxItems = parseInt(opts.maxItems, 10) || 100;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
@@ -424,42 +433,41 @@
     postState();
   }
 
-    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-      if (msg?.type === 'ARCHIVER_START') startRunning();
-      if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
-      if (msg?.type === 'ARCHIVER_RESET') {
-        stopRunning(false);
-        sendResponse();
-      }
-      if (msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
-        inlineVideosForSnapshot(3)
-          .then((stats) => {
-            // If your current flow freezes the page before saving, keep it here or in background.
-            // freezePage();
-            setTimeout(() => sendResponse({ ok: true, stats }), 150);
-          })
-          .catch((err) => {
-            console.error('prepare-for-save failed', err);
-            setTimeout(() => sendResponse({ ok: false, error: String(err) }), 150);
-          });
-        return true;
-      }
-    });
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === 'ARCHIVER_START') startRunning();
+    if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+    if (msg?.type === 'ARCHIVER_RESET') {
+      stopRunning(false);
+      sendResponse();
+    }
+    if (msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+      inlineVideosForSnapshot(3)
+        .then((stats) => {
+          // Optional: console.log('[Archiver] prepare stats:', stats);
+          setTimeout(() => sendResponse({ ok: true, stats }), 200);
+        })
+        .catch((err) => {
+          console.error('prepare-for-save failed', err);
+          setTimeout(() => sendResponse({ ok: false, error: String(err) }), 200);
+        });
+      return true;
+    }
+  });
 
-    // Dev helper (console): window.__civitaiArchiverStart()
-    window.__civitaiArchiverStart = startRunning;
-    window.__civitaiArchiverStop = () => stopRunning(true);
+  // Dev helper (console): window.__civitaiArchiverStart()
+  window.__civitaiArchiverStart = startRunning;
+  window.__civitaiArchiverStop = () => stopRunning(true);
 
-      if (typeof module !== 'undefined' && module.exports) {
-        module.exports = {
-          absUrl,
-          pickBestFromSrcset,
-          isTinyDataURI,
-          blobToDataURL,
-          fetchAsDataURLWithType,
-          findPreferredVideoSource,
-          inlineSingleVideoBinary,
-          inlineVideosForSnapshot
-        };
-      }
-  })();
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      absUrl,
+      pickBestFromSrcset,
+      isTinyDataURI,
+      blobToDataURL,
+      fetchAsDataURLWithType,
+      findPreferredVideoSource,
+      inlineSingleVideoBinary,
+      inlineVideosForSnapshot
+    };
+  }
+})();
