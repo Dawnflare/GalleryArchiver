@@ -96,3 +96,53 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     }
   }
 });
+
+// --- Add this block at the bottom of your existing popup.js ---
+
+(async function archiverPrepareAndSaveWiring() {
+  function $(sel) { return document.querySelector(sel); }
+  async function getActiveTab() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab;
+  }
+  function sendToTab(tabId, msg, timeout = 5000) {
+    return new Promise((resolve) => {
+      let done = false;
+      chrome.tabs.sendMessage(tabId, msg, (resp) => {
+        done = true;
+        if (chrome.runtime.lastError) {
+          console.warn('[POPUP] sendToTab error:', chrome.runtime.lastError.message);
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+        } else {
+          resolve(resp || { ok: true });
+        }
+      });
+      setTimeout(() => { if (!done) resolve({ ok: false, error: 'timeout' }); }, timeout);
+    });
+  }
+
+  // Find your existing Save button (supports either of these IDs).
+  const saveBtn = $('#saveBtn') || $('#saveMhtmlBtn');
+  if (!saveBtn) {
+    console.warn('[POPUP] Save button not found (expected #saveBtn or #saveMhtmlBtn)');
+    return;
+  }
+
+  saveBtn.addEventListener('click', async (e) => {
+    try {
+      const tab = await getActiveTab();
+      if (!tab) return;
+
+      // 1) Ask content to build snapshot (this inlines videos to data: and hides the live app)
+      console.log('[POPUP] prepare → content');
+      const prep = await sendToTab(tab.id, { type: 'ARCHIVER_PREPARE_FOR_SAVE' }, 7000);
+      console.log('[POPUP] prepare result:', prep);
+
+      // 2) Ask background to run pageCapture.saveAsMHTML for this tab
+      await chrome.runtime.sendMessage({ type: 'ARCHIVER_SAVE_MHTML', tabId: tab.id });
+      console.log('[POPUP] save request sent to background');
+    } catch (err) {
+      console.error('[POPUP] prepare/save error:', err);
+    }
+  }, { once: false });
+})();
