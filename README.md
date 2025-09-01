@@ -1,6 +1,6 @@
-# Civitai Gallery Archiver
+# Gallery Archiver by Dawnflare
 
-Brave/Chromium extension that hoards Civitai infinite‑scroll galleries and saves them as a **single MHTML** file.
+Brave/Chromium extension that hoards infinite‑scroll galleries and saves them as a **single MHTML** file. Built for Civitai but can work on similar gallery pages.
 
 ## Features
 - **Autoscroll capture** – start the extension and it automatically scrolls through the gallery, collecting high‑resolution images until the limit is reached or you stop it.
@@ -13,8 +13,8 @@ Brave/Chromium extension that hoards Civitai infinite‑scroll galleries and sav
 
 ## Install (dev)
 1. Open Brave → `brave://extensions/` and enable **Developer mode** (top‑right).
-2. Click **Load unpacked** and select this folder (`civitai-gallery-archiver/`).
-3. Pin the extension, open a Civitai gallery page, and use the popup controls.
+2. Click **Load unpacked** and select this folder (`GalleryArchiver/`).
+3. Pin the extension, open a gallery page (e.g. on Civitai), and use the popup controls.
 
 ## Notes
 - Works best when you save immediately after stopping (resources stay warm in cache).
@@ -22,6 +22,6 @@ Brave/Chromium extension that hoards Civitai infinite‑scroll galleries and sav
 - Change these values in the popup before pressing **Start**.
 
 ## Roadmap
-- Robust selectors & heuristics for different Civitai gallery layouts.
+- Robust selectors & heuristics for different gallery layouts (starting with Civitai).
 - Size warnings for very large captures.
 - Optional single‑HTML exporter (later).
