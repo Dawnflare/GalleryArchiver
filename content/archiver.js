@@ -439,3 +439,151 @@
   // Optional debug helper (run in console if needed):
   //   window.__archiverFreezeVideos = freezeVideosInPlace;
 })();
+
+/* ------------------------------------------------------------------
+ * [Archiver] scope gallery layout to #gallery + video play badge
+ *  - Applies grid only inside #gallery (no header stretch)
+ *  - Adds a small ▶ badge on stills that replaced videos
+ *  - Cleans up when ARCHIVER_STOP fires
+ * ------------------------------------------------------------------ */
+(function () {
+  const STYLE_ID_GRID  = 'archiver-gallery-grid-style';
+  const STYLE_ID_BADGE = 'archiver-video-badge-style';
+  const ATTR_IS_VIDEO  = 'data-archiver-video';
+
+  const $  = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  function getGalleryRoot() {
+    // Prefer the explicit id the site uses
+    const g = document.getElementById('gallery');
+    if (g) return g;
+
+    // Fallback: lowest common ancestor of several /images/... anchors
+    const anchors = $$('a[href*="/images/"], a[href^="/images/"]');
+    if (anchors.length < 6) return null;
+    const sample = anchors.slice(0, 20);
+    const chains = sample.map(a => {
+      const list = [];
+      for (let n=a; n && n!==document.documentElement; n=n.parentElement) list.push(n);
+      return list;
+    });
+    let lca = null;
+    for (const cand of chains[0]) {
+      if (chains.every(chain => chain.includes(cand))) { lca = cand; break; }
+    }
+    return (lca && lca !== document.body) ? lca : null;
+  }
+
+  function ensureGridStyles(galleryRoot) {
+    if (!galleryRoot) return;
+    if (document.getElementById(STYLE_ID_GRID)) return;
+
+    const s = document.createElement('style');
+    s.id = STYLE_ID_GRID;
+
+    // IMPORTANT: All rules are hard-scoped under #gallery so the header doesn’t change.
+    s.textContent = `
+      /* keep the gallery container full width without touching header */
+      #gallery .mantine-Container-root,
+      #gallery .mantine-container,
+      #gallery [class*="Container-root"] {
+        max-width: 100% !important;
+        width: 100% !important;
+      }
+
+      /* force 6 columns only inside the gallery grid */
+      #gallery .mantine-SimpleGrid-root,
+      #gallery [class*="SimpleGrid-root"],
+      #gallery [class*="simpleGrid"] {
+        display: grid !important;
+        grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        gap: 12px !important;
+      }
+
+      /* play badge basics (actual element is inserted by JS below) */
+      a[${ATTR_IS_VIDEO}] { position: relative !important; }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function ensureBadgeStyles() {
+    if (document.getElementById(STYLE_ID_BADGE)) return;
+    const s = document.createElement('style');
+    s.id = STYLE_ID_BADGE;
+    s.textContent = `
+      a[${ATTR_IS_VIDEO}] .archiver-badge {
+        position: absolute;
+        right: 8px; top: 8px;
+        width: 0; height: 0;
+        border-left: 12px solid #fff;               /* ▶ */
+        border-top: 8px solid transparent;
+        border-bottom: 8px solid transparent;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,.6));
+        opacity: .95; z-index: 2147483000;
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function addPlayBadges(galleryRoot) {
+    if (!galleryRoot) return;
+
+    // Stills we generate for videos are data: URLs and/or use alt="Video snapshot"
+    const candidates = $$(
+      'a[href*="/images/"]',
+      galleryRoot
+    ).filter(a =>
+      a.querySelector('img[src^="data:image/"]') ||
+      a.querySelector('img[alt="Video snapshot"]')
+    );
+
+    for (const a of candidates) {
+      if (a.hasAttribute(ATTR_IS_VIDEO)) continue;
+      a.setAttribute(ATTR_IS_VIDEO, '');
+      const badge = document.createElement('span');
+      badge.className = 'archiver-badge';
+      a.appendChild(badge);
+    }
+  }
+
+  function cleanup() {
+    const s1 = document.getElementById(STYLE_ID_GRID);
+    const s2 = document.getElementById(STYLE_ID_BADGE);
+    if (s1) s1.remove();
+    if (s2) s2.remove();
+    $$(`a[${ATTR_IS_VIDEO}]`).forEach(a => {
+      a.removeAttribute(ATTR_IS_VIDEO);
+      const b = a.querySelector('.archiver-badge'); if (b) b.remove();
+    });
+  }
+
+  async function prepareScopedLayoutAndBadges() {
+    const root = getGalleryRoot();
+    ensureGridStyles(root);
+    ensureBadgeStyles();
+    addPlayBadges(root);
+    // tiny settle for paint
+    await new Promise(r => setTimeout(r, 30));
+    return { ok: true };
+  }
+
+  // Hook into the existing PREPARE call used by background.js before saving
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!msg) return;
+    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+      (async () => {
+        try { sendResponse(await prepareScopedLayoutAndBadges()); }
+        catch (e) { sendResponse({ ok:false, error:String(e) }); }
+      })();
+      return true;
+    }
+    if (msg.type === 'ARCHIVER_STOP') {
+      cleanup();
+    }
+  });
+
+  // Safety: restore on navigation
+  window.addEventListener('beforeunload', cleanup, { once: true });
+})();
