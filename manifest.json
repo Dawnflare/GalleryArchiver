@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Civitai Gallery Archiver",
+  "name": "Gallery Archiver by Dawnflare",
   "version": "0.1.0",
-  "description": "Capture Civitai infinite galleries into a single MHTML with clickable links per image. Core build: MHTML-only, no enrichment.",
+  "description": "Capture infinite-scroll galleries into a single MHTML with clickable links per image. Core build: MHTML-only, no enrichment.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -18,7 +18,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Civitai Archiver"
+    "default_title": "Gallery Archiver by Dawnflare"
   },
   "content_scripts": [
     {
