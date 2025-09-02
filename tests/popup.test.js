@@ -24,7 +24,7 @@ global.chrome = {
     reload: jest.fn()
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)), search: jest.fn((query, cb) => cb([{ filename: '/tmp/prev.mhtml' }])) },
+  downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([

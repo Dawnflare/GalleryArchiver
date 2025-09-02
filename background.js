@@ -80,23 +80,19 @@ async function saveMHTML(tabId) {
     const ts = formatTimestamp(opts.timestampFormat);
     const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
     let dir = '';
+    let saveAs = true;
     if (opts.saveLocation === 'custom' && opts.customSavePath) {
-      dir = opts.customSavePath;
-    } else if (opts.saveLocation === 'last') {
-      try {
-        const recent = await new Promise(res => chrome.downloads.search ? chrome.downloads.search({ limit: 1, orderBy: ['-startTime'] }, res) : res([]));
-        const path = recent?.[0]?.filename;
-        if (path) dir = path.replace(/[/\\][^/\\]*$/, '');
-      } catch (e) {
-        console.warn('Could not determine last download path', e);
-      }
+      dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
+      saveAs = false;
+    } else if (opts.saveLocation === 'default') {
+      saveAs = false;
     }
-    const fullName = dir ? `${dir.replace(/[/\\]+$/, '')}/${filename}` : filename;
+    const fullName = dir ? `${dir.replace(/[\\/]+$/, '')}/${filename}` : filename;
 
     const downloadId = await chrome.downloads.download({
       url: dataUrl,
       filename: fullName,
-      saveAs: true
+      saveAs
     });
 
     const onChanged = delta => {

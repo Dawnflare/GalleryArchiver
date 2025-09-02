@@ -11,7 +11,7 @@ global.chrome = {
     reload: jest.fn(),
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(Uint8Array.from([116,101,115,116]).buffer) })) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() }, search: jest.fn((query, cb) => cb([{ filename: '/tmp/prev.mhtml' }])) },
+  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
   commands: { onCommand: { addListener: jest.fn() } },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)) } }
