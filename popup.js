@@ -139,39 +139,18 @@ document.getElementById('save').addEventListener('click', async () => {
       const ts = formatTimestamp(opts.timestampFormat);
       const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-      let saveAs = opts.saveLocation === 'last';
-      let targetPath = baseFilename;
-      if (opts.saveLocation === 'custom') {
-        if (opts.customSavePath) {
-          saveAs = false;
-          targetPath = joinPath(opts.customSavePath, baseFilename);
-        } else {
-          saveAs = true;
-          targetPath = baseFilename;
-        }
+      let filename = baseFilename;
+      if (opts.saveLocation === 'custom' && opts.customSavePath) {
+        filename = joinPath(opts.customSavePath, baseFilename);
+      } else if (opts.saveLocation === 'last' && opts.lastDownloadDir) {
+        filename = joinPath(opts.lastDownloadDir, baseFilename);
       }
 
-      let downloadId;
-      let listener;
-      if (chrome.downloads.onDeterminingFilename?.addListener) {
-        listener = (item, suggest) => {
-          if (!downloadId || item.id === downloadId) {
-            if (typeof suggest === 'function') {
-              suggest({ filename: targetPath });
-            }
-            chrome.downloads.onDeterminingFilename.removeListener(listener);
-          }
-        };
-        chrome.downloads.onDeterminingFilename.addListener(listener);
-      }
-
-      downloadId = await chrome.downloads.download({
+      const downloadId = await chrome.downloads.download({
         url,
-        saveAs
+        filename,
+        saveAs: true
       });
-      if (downloadId === undefined && listener) {
-        chrome.downloads.onDeterminingFilename.removeListener(listener);
-      }
 
     // After download completes, stop (same as your branch)
     const onChanged = async delta => {
