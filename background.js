@@ -57,7 +57,9 @@ async function saveMHTML(tabId) {
     const opts = await new Promise(r => chrome.storage.local.get({
       filenameBase: 'title',
       customFilename: '',
-      timestampFormat: 'YYYYMMDD_HHMMSS'
+      timestampFormat: 'YYYYMMDD_HHMMSS',
+      useLastDir: false,
+      lastDownloadDir: ''
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -76,18 +78,38 @@ async function saveMHTML(tabId) {
         break;
     }
     const ts = formatTimestamp(opts.timestampFormat);
-    const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+    let filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+    let saveAs = true;
+    if (opts.useLastDir && opts.lastDownloadDir) {
+      const sep = /[\\/]$/.test(opts.lastDownloadDir) ? '' : (opts.lastDownloadDir.includes('\\') ? '\\' : '/');
+      filename = opts.lastDownloadDir + sep + filename;
+      saveAs = false;
+    }
 
     const downloadId = await chrome.downloads.download({
       url: dataUrl,
       filename,
-      saveAs: true
+      saveAs
     });
 
     const onChanged = delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
         chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
+        try {
+          chrome.downloads.search({ id: downloadId }, results => {
+            const fname = results?.[0]?.filename;
+            if (fname) {
+              const idx = Math.max(fname.lastIndexOf('/'), fname.lastIndexOf('\\'));
+              if (idx > 0) {
+                const dir = fname.slice(0, idx);
+                chrome.storage.local.set({ lastDownloadDir: dir });
+              }
+            }
+          });
+        } catch (e) {
+          console.warn('download search failed:', e);
+        }
       }
     };
 
