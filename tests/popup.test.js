@@ -1,11 +1,9 @@
 document.body.innerHTML = `
-  <button id="start"></button>
+  <button id="start"></button><span id="startShortcutLabel"></span>
   <button id="stop"></button>
-  <button id="reset"></button>
-  <button id="save"></button>
+  <button id="reset"></button><span id="resetShortcutLabel"></span>
+  <button id="save"></button><span id="saveShortcutLabel"></span>
   <input id="maxItems" />
-  <input id="scrollDelay" />
-  <input id="stabilityTimeout" />
   <span id="seen"></span>
   <span id="captured"></span>
   <span id="deduped"></span>
@@ -37,6 +35,7 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
@@ -60,4 +59,14 @@ test('reset button stops autoscroll, reloads the page and extension', async () =
   expect(chrome.runtime.reload).toHaveBeenCalled();
   expect(chrome.tabs.sendMessage.mock.invocationCallOrder[0]).toBeLessThan(chrome.tabs.reload.mock.invocationCallOrder[0]);
   expect(chrome.tabs.reload.mock.invocationCallOrder[0]).toBeLessThan(chrome.runtime.reload.mock.invocationCallOrder[0]);
+});
+
+test('save shortcut triggers page capture', async () => {
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalled();
 });

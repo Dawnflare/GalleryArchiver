@@ -6,7 +6,7 @@
     seen: 0,
     captured: 0,
     deduped: 0,
-    maxItems: 100,
+    maxItems: 200,
     scrollDelay: 300,
     stabilityTimeout: 400,
     items: new Map(), // key -> { detailUrl, imageUrl, el, state }
@@ -265,9 +265,9 @@
     state.allImageUrls = new Set();
     // Load options before starting capture
     const opts = await new Promise(resolve => {
-    chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
+    chrome.storage.local.get({ maxItems: 200, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
     });
-    state.maxItems = parseInt(opts.maxItems, 10) || 100;
+    state.maxItems = parseInt(opts.maxItems, 10) || 200;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
     // Collect any images already on the page

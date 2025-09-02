@@ -8,19 +8,48 @@ async function sendToContent(type, payload={}) {
   return chrome.tabs.sendMessage(tab.id, { type, payload });
 }
 
+const shortcutSettings = {};
+
+function parseShortcut(str) {
+  const parts = str.split('+');
+  const key = parts.pop().toLowerCase();
+  const modifiers = { ctrl: false, alt: false, shift: false };
+  parts.forEach(p => {
+    const n = p.toLowerCase();
+    if (n === 'ctrl' || n === 'control') modifiers.ctrl = true;
+    if (n === 'alt') modifiers.alt = true;
+    if (n === 'shift') modifiers.shift = true;
+  });
+  return { key, ...modifiers };
+}
+
 function restoreOptions() {
-  chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, (opts) => {
+  chrome.storage.local.get({
+    maxItems: 200,
+    startShortcut: 'Alt+1',
+    resetShortcut: 'Alt+F5',
+    saveShortcut: 'Alt+2'
+  }, (opts) => {
     document.getElementById('maxItems').value = opts.maxItems;
-    document.getElementById('scrollDelay').value = opts.scrollDelay;
-    document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
+    shortcutSettings.start = parseShortcut(opts.startShortcut);
+    shortcutSettings.reset = parseShortcut(opts.resetShortcut);
+    shortcutSettings.save = parseShortcut(opts.saveShortcut);
+    document.getElementById('startShortcutLabel').textContent = `(${opts.startShortcut})`;
+    document.getElementById('resetShortcutLabel').textContent = `(${opts.resetShortcut})`;
+    document.getElementById('saveShortcutLabel').textContent = `(${opts.saveShortcut})`;
   });
 }
 
 function saveOptions() {
-  const maxItems = parseInt(document.getElementById('maxItems').value || '100', 10);
-  const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
-  const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
-  chrome.storage.local.set({ maxItems, scrollDelay, stabilityTimeout });
+  const maxItems = parseInt(document.getElementById('maxItems').value || '200', 10);
+  chrome.storage.local.set({ maxItems });
+}
+
+function matchesShortcut(e, sc) {
+  return e.key.toLowerCase() === sc.key &&
+    !!e.ctrlKey === sc.ctrl &&
+    !!e.altKey === sc.alt &&
+    !!e.shiftKey === sc.shift;
 }
 
 document.getElementById('start').addEventListener('click', async () => {
@@ -87,6 +116,20 @@ document.getElementById('save').addEventListener('click', async () => {
 
 restoreOptions();
 document.getElementById('status').textContent = '';
+
+document.addEventListener('keydown', (e) => {
+  if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (shortcutSettings.start && matchesShortcut(e, shortcutSettings.start)) {
+    e.preventDefault();
+    document.getElementById('start').click();
+  } else if (shortcutSettings.reset && matchesShortcut(e, shortcutSettings.reset)) {
+    e.preventDefault();
+    document.getElementById('reset').click();
+  } else if (shortcutSettings.save && matchesShortcut(e, shortcutSettings.save)) {
+    e.preventDefault();
+    document.getElementById('save').click();
+  }
+});
 
 // Live stats
 chrome.runtime.onMessage.addListener((msg, sender) => {

@@ -20,6 +20,7 @@
     "default_popup": "popup.html",
     "default_title": "Gallery Archiver by Dawnflare"
   },
+  "options_page": "options.html",
   "content_scripts": [
     {
       "matches": [
