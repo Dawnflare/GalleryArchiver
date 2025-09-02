@@ -43,9 +43,20 @@ document.getElementById('reset').addEventListener('click', async () => {
 
 document.getElementById('save').addEventListener('click', async () => {
   const tab = await getActiveTab();
+
+  // 1) Ask content to freeze videos into still images
   try {
+    const prep = await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {});
+    console.log('[POPUP] PREPARE result:', prep);
+    // tiny settle so the DOM paints before capture
+    await new Promise(r => setTimeout(r, 120));
+  } catch (e) {
+    console.warn('[POPUP] PREPARE failed (continuing anyway):', e);
+  }
+
+  try {
+    // 2) Save page → MHTML (unchanged logic from your main branch)
     const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
-    // Explicitly set the MIME type so the download uses an .mhtml extension
     const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
     const url = URL.createObjectURL(blob);
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -54,6 +65,8 @@ document.getElementById('save').addEventListener('click', async () => {
       filename: `civitai-archive-${ts}.mhtml`,
       saveAs: true
     });
+
+    // After download completes, stop (same as your branch)
     const onChanged = delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
@@ -64,7 +77,6 @@ document.getElementById('save').addEventListener('click', async () => {
     if (chrome.downloads.onChanged?.addListener) {
       chrome.downloads.onChanged.addListener(onChanged);
     } else {
-      // Fallback: immediately stop if downloads API events unavailable
       sendToContent('ARCHIVER_STOP');
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
