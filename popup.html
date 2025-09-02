@@ -5,23 +5,26 @@
     <title>Gallery Archiver by Dawnflare</title>
     <style>
       body { font-family: system-ui, Arial, sans-serif; margin: 12px; min-width: 260px; color: #eee; background: #222; }
-      button { margin-right: 8px; margin-bottom: 8px; }
+      button { margin-left: 8px; margin-bottom: 8px; }
       label { display: block; margin-top: 8px; }
       input[type="number"] { width: 80px; }
       .shortcut { font-size: 0.8em; color: #888; margin-left: 4px; }
       .row { margin: 6px 0; }
+      .buttons { text-align: right; }
       .stat { font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
-    <div class="row">
+    <div class="row buttons">
       <button id="start">Start</button><span id="startShortcutLabel" class="shortcut"></span>
+      <button id="save">Save as MHTML</button><span id="saveShortcutLabel" class="shortcut"></span>
+    </div>
+    <div class="row buttons">
+      <button id="startSave">Start and Save</button><span id="startSaveShortcutLabel" class="shortcut"></span>
+    </div>
+    <div class="row buttons">
       <button id="stop">Stop</button>
       <button id="reset">Reset</button><span id="resetShortcutLabel" class="shortcut"></span>
-    </div>
-    <div class="row">
-      <button id="startSave">Start and Save</button><span id="startSaveShortcutLabel" class="shortcut"></span>
-      <button id="save">Save as HTML</button><span id="saveShortcutLabel" class="shortcut"></span>
     </div>
     <div class="row">
       <progress id="progress" value="0" max="0" style="width:100%"></progress>
