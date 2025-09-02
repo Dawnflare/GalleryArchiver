@@ -7,20 +7,24 @@ async function sendToContent(type, payload={}) {
   const tab = await getActiveTab();
   return chrome.tabs.sendMessage(tab.id, { type, payload });
 }
-
 function restoreOptions() {
-  chrome.storage.local.get({ maxItems: 100, scrollDelay: 300, stabilityTimeout: 400 }, (opts) => {
+  chrome.storage.local.get({
+    maxItems: 200
+  }, (opts) => {
     document.getElementById('maxItems').value = opts.maxItems;
-    document.getElementById('scrollDelay').value = opts.scrollDelay;
-    document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
+  });
+
+  chrome.commands.getAll(commands => {
+    const find = name => commands.find(c => c.name === name)?.shortcut || '';
+    document.getElementById('startShortcutLabel').textContent = `(${find('start') || 'Alt+1'})`;
+    document.getElementById('resetShortcutLabel').textContent = `(${find('reset') || 'Alt+Shift+R'})`;
+    document.getElementById('saveShortcutLabel').textContent = `(${find('save') || 'Alt+2'})`;
   });
 }
 
 function saveOptions() {
-  const maxItems = parseInt(document.getElementById('maxItems').value || '100', 10);
-  const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
-  const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
-  chrome.storage.local.set({ maxItems, scrollDelay, stabilityTimeout });
+  const maxItems = parseInt(document.getElementById('maxItems').value || '200', 10);
+  chrome.storage.local.set({ maxItems });
 }
 
 document.getElementById('start').addEventListener('click', async () => {

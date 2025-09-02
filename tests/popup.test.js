@@ -1,11 +1,9 @@
 document.body.innerHTML = `
-  <button id="start"></button>
+  <button id="start"></button><span id="startShortcutLabel"></span>
   <button id="stop"></button>
-  <button id="reset"></button>
-  <button id="save"></button>
+  <button id="reset"></button><span id="resetShortcutLabel"></span>
+  <button id="save"></button><span id="saveShortcutLabel"></span>
   <input id="maxItems" />
-  <input id="scrollDelay" />
-  <input id="stabilityTimeout" />
   <span id="seen"></span>
   <span id="captured"></span>
   <span id="deduped"></span>
@@ -26,7 +24,12 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() }
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
+  commands: { getAll: jest.fn(cb => cb([
+    { name: 'start', shortcut: 'Alt+1' },
+    { name: 'reset', shortcut: 'Alt+Shift+R' },
+    { name: 'save', shortcut: 'Alt+2' }
+  ])) }
 };
 
 require('../popup.js');
@@ -37,6 +40,7 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
@@ -60,4 +64,11 @@ test('reset button stops autoscroll, reloads the page and extension', async () =
   expect(chrome.runtime.reload).toHaveBeenCalled();
   expect(chrome.tabs.sendMessage.mock.invocationCallOrder[0]).toBeLessThan(chrome.tabs.reload.mock.invocationCallOrder[0]);
   expect(chrome.tabs.reload.mock.invocationCallOrder[0]).toBeLessThan(chrome.runtime.reload.mock.invocationCallOrder[0]);
+});
+
+test('displays shortcut labels from commands API', async () => {
+  await Promise.resolve();
+  expect(document.getElementById('startShortcutLabel').textContent).toBe('(Alt+1)');
+  expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+Shift+R)');
+  expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
 });

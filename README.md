@@ -9,7 +9,7 @@ Brave/Chromium extension that hoards infinite‑scroll galleries and saves them 
   - **Stop** freezes the page so it can be exported.
   - **Save** downloads the page as an `.mhtml` archive.
   - **Reset** clears all state, reloads the page, and restarts the extension.
-- **Configurable options** – set maximum items, scroll delay, and stability timeout directly in the popup.
+ - **Configurable options** – set maximum items in the popup; adjust scroll delay, stability timeout, and keyboard shortcuts on the options page (shortcuts also appear under `brave://extensions/shortcuts`).
 
 ## Install (dev)
 1. Open Brave → `brave://extensions/` and enable **Developer mode** (top‑right).
@@ -18,8 +18,8 @@ Brave/Chromium extension that hoards infinite‑scroll galleries and saves them 
 
 ## Notes
 - Works best when you save immediately after stopping.
-- Defaults: max items = 100, scroll delay = 300 ms, stability timeout = 400 ms.
-- Change these values in the popup before pressing **Start**.
+ - Defaults: max items = 200, scroll delay = 300 ms, stability timeout = 400 ms.
+ - Adjust these values before pressing **Start**.
 
 ## Roadmap
 - Robust selectors & heuristics for different gallery layouts (starting with Civitai).

@@ -8,18 +8,19 @@
       button { margin-right: 8px; margin-bottom: 8px; }
       label { display: block; margin-top: 8px; }
       input[type="number"] { width: 80px; }
+      .shortcut { font-size: 0.8em; color: #888; margin-left: 4px; }
       .row { margin: 6px 0; }
       .stat { font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <div class="row">
-      <button id="start">Start</button>
+      <button id="start">Start</button><span id="startShortcutLabel" class="shortcut"></span>
       <button id="stop">Stop</button>
-      <button id="reset">Reset</button>
+      <button id="reset">Reset</button><span id="resetShortcutLabel" class="shortcut"></span>
     </div>
     <div class="row">
-      <button id="save">Save as MHTML</button>
+      <button id="save">Save as HTML</button><span id="saveShortcutLabel" class="shortcut"></span>
     </div>
     <div class="row">
       <progress id="progress" value="0" max="0" style="width:100%"></progress>
@@ -29,13 +30,7 @@
       Seen: <span id="seen">0</span> &nbsp; Captured: <span id="captured">0</span> &nbsp; Deduped: <span id="deduped">0</span> &nbsp; Total: <span id="total">0</span>
     </div>
     <div class="row">
-      <label>Max items: <input id="maxItems" type="number" min="10" max="100000" step="10" value="100"></label>
-    </div>
-    <div class="row">
-      <label>Scroll delay (ms): <input id="scrollDelay" type="number" min="50" max="5000" step="50" value="300"></label>
-    </div>
-    <div class="row">
-      <label>Stability timeout (ms): <input id="stabilityTimeout" type="number" min="100" max="5000" step="100" value="400"></label>
+      <label>Max items: <input id="maxItems" type="number" min="10" max="100000" step="10" value="200"></label>
     </div>
     <script src="popup.js"></script>
   </body>

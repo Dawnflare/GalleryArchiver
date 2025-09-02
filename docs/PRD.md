@@ -27,12 +27,13 @@ Civitai’s React/virtualized galleries create and remove DOM nodes as you scrol
 ## 5) User Stories
 - Start simple capture → auto‑scrolls and collects images+links → Save as MHTML → single file containing what I saw.
 - Stop anytime and save partial progress.
-- Default **Max items = 100** for rapid testing (user can raise later).
+- Default **Max items = 200** for rapid testing (user can raise later).
 
 ## 6) UX / Controls (Popup)
 - **Buttons:** Start, Stop, Save as MHTML.
 - **Status:** Seen / Captured / Deduped counters; basic progress indicator.
-- **Options (v1):** Max items (default 100).
+- **Options (v1):** Max items (default 200).
+- **Global Shortcuts:** Start (Alt+1), Save (Alt+2), Reset (Alt+Shift+R); configurable via options page and Brave's extension shortcuts menu.
 
 ## 7) Technical Approach (Overview)
 1. **Hoarding to bypass virtualization:** Create an **Archive Bucket** (`#civitai-archiver-bucket`) appended to `document.body`, outside the app’s React root. As cards appear, clone static entries into the bucket; each clone contains a clickable `<a href="…/images/…"><img/></a>`.
@@ -64,11 +65,11 @@ Civitai’s React/virtualized galleries create and remove DOM nodes as you scrol
 - Blur/LQIP swaps → stability + quality gates + `srcset` best candidate.
 - CSS background‑image cards → parse computed style.
 - Expiring URLs → save immediately after freeze; keep clones visible.
-- Large runs → default cap 100; warn when increasing.
+- Large runs → default cap 200; warn when increasing.
 
 ## 11) Milestones
 - M0 Scaffold → M1 Clone (manual scroll) → M2 Auto‑scroll → M3 Freeze & Save → M4 Polish.
 
 ## 12) Test Plan
 - Multiple Civitai gallery pages; verify images + anchors in `.mhtml`.
-- Placeholder handling; stopping at 100; larger caps sanity test.
+- Placeholder handling; stopping at 200; larger caps sanity test.
