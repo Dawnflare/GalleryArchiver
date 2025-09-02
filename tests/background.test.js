@@ -63,7 +63,7 @@ test('save command opens popup then triggers download', async () => {
   expect(opts.saveAs).toBe(true);
 });
 
-test('stores and reuses last download directory', async () => {
+test('stores last download directory but continues prompting', async () => {
   chrome.downloads.download.mockClear();
   chrome.downloads.onChanged.addListener.mockClear();
   chrome.storage.local.set.mockClear();
@@ -91,12 +91,8 @@ test('stores and reuses last download directory', async () => {
   await handler('save');
   const opts = chrome.downloads.download.mock.calls[0][0];
   expect(opts.filename).toMatch(/^My_Tab_.*\.mhtml$/);
-  expect(opts.saveAs).toBe(false);
-  const determineListener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
-  const suggest = jest.fn();
-  determineListener({ id: 1 }, suggest);
-  expect(suggest).toHaveBeenCalled();
-  expect(suggest.mock.calls[0][0].filename).toMatch(/^\/prev\/path\/My_Tab_.*\.mhtml$/);
+  expect(opts.saveAs).toBe(true);
+  expect(chrome.downloads.onDeterminingFilename.addListener).not.toHaveBeenCalled();
 });
 
 test('uses custom save path when configured', async () => {

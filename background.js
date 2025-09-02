@@ -86,27 +86,24 @@ async function saveMHTML(tabId) {
     }
     const ts = formatTimestamp(opts.timestampFormat);
     const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
-    let saveAs = false;
+    let saveAs = opts.saveLocation === 'last';
     let targetDir = '';
-    if (opts.saveLocation === 'custom' && opts.customSavePath) {
-      targetDir = opts.customSavePath;
-    } else if (opts.saveLocation === 'last') {
-      if (opts.lastDownloadDir) {
-        targetDir = opts.lastDownloadDir;
+    if (opts.saveLocation === 'custom') {
+      if (opts.customSavePath) {
+        targetDir = opts.customSavePath;
       } else {
         saveAs = true;
       }
-    } else {
-      saveAs = opts.saveLocation === 'last';
     }
 
     let downloadId;
     let listener;
     if (targetDir && chrome.downloads.onDeterminingFilename?.addListener) {
+      const targetPath = joinPath(targetDir, baseFilename).replace(/\\/g, '/');
       listener = (item, suggest) => {
         if (!downloadId || item.id === downloadId) {
           if (typeof suggest === 'function') {
-            suggest({ filename: joinPath(targetDir, baseFilename) });
+            suggest({ filename: targetPath });
           }
           chrome.downloads.onDeterminingFilename.removeListener(listener);
         }
