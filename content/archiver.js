@@ -441,10 +441,8 @@
 })();
 
 /* ------------------------------------------------------------------
- * [Archiver] Scope gallery layout to #gallery + bake ▶ onto video stills
+ * [Archiver] Scope gallery layout to #gallery
  *  - Applies 6-col grid only inside #gallery (header/description unchanged)
- *  - On ARCHIVER_PREPARE_FOR_SAVE: draws a play glyph into the pixels of
- *    any video snapshot image so the icon survives in saved MHTML
  *  - Cleans up injected layout style when ARCHIVER_STOP fires
  * ------------------------------------------------------------------ */
 (function () {
@@ -508,59 +506,6 @@
     if (s1) s1.remove();
   }
 
-  /* -------------------------- Play glyph baking -------------------------- */
-  function drawPlayOnCanvas(imgEl) {
-    // Use displayed size to keep output small and crisp
-    const rect    = imgEl.getBoundingClientRect();
-    const dispW   = Math.max(1, Math.round(rect.width  || imgEl.naturalWidth  || 450));
-    const dispH   = Math.max(1, Math.round(rect.height || imgEl.naturalHeight || 450));
-
-    const c = document.createElement('canvas');
-    c.width = dispW; c.height = dispH;
-    const ctx = c.getContext('2d');
-    try { ctx.drawImage(imgEl, 0, 0, dispW, dispH); } catch (_) { return null; }
-
-    // Badge geometry (top-right)
-    const d   = Math.round(Math.min(dispW, dispH) * 0.12); // circle radius
-    const pad = Math.max(6, Math.round(d * 0.5));
-    const cx  = dispW - pad - d, cy = pad + d;
-
-    // Dark translucent circle
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.beginPath(); ctx.arc(cx, cy, d, 0, Math.PI*2); ctx.fill();
-
-    // White play triangle
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.moveTo(cx - d * 0.5, cy - d * 0.65);
-    ctx.lineTo(cx - d * 0.5, cy + d * 0.65);
-    ctx.lineTo(cx + d * 0.6,  cy);
-    ctx.closePath(); ctx.fill();
-
-    // JPEG keeps sizes small and blends with photo content
-    return c.toDataURL('image/jpeg', 0.9);
-  }
-
-  async function bakePlayGlyphs(root) {
-    if (!root) return { ok:true, baked:0 };
-
-    // Heuristic: our video stills are data URLs and/or marked by alt text
-    const imgs = $$('a[href*="/images/"] img', root).filter(img =>
-      (img.src && img.src.startsWith('data:image/')) || /Video snapshot/i.test(img.alt || '')
-    ).filter(img => !img.dataset.archiverPlayMarked);
-
-    let baked = 0;
-    for (const img of imgs) {
-      const url = drawPlayOnCanvas(img);
-      if (url) {
-        img.src = url;
-        img.dataset.archiverPlayMarked = '1';
-        baked++;
-      }
-    }
-    return { ok:true, baked };
-  }
-
   /* ------------------------- Message integration ------------------------- */
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg) return;
@@ -569,7 +514,6 @@
         try {
           const root = getGalleryRoot();
           ensureGridStyles(root);
-          const res = await bakePlayGlyphs(root);
           // tiny settle for paint
           await new Promise(r => setTimeout(r, 30));
           sendResponse(Object.assign({ ok:true }, res));
@@ -586,4 +530,155 @@
 
   // Safety: restore on navigation
   window.addEventListener('beforeunload', cleanup, { once: true });
+})();
+
+/* ------------------------------------------------------------------
+ * [Archiver] Play badge overlay (data:SVG) with re-apply guard
+ *  - Puts a small ▶ overlay inside each video card
+ *  - Keeps re-applying for ~1.2s to survive React re-renders
+ *  - Requires no external CSS, serializes cleanly to MHTML
+ * ------------------------------------------------------------------ */
+(() => {
+  const LOG = (...a)=>{ try { console.log('[Archiver] overlay', ...a);} catch(_){} };
+  const $$  = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  const ATTR_OVERLAY = 'data-archiver-overlay';
+  const ATTR_REL_SET = 'data-archiver-pos-rel';
+
+  function getGalleryRoot() {
+    return document.getElementById('gallery') || document;
+  }
+
+  function svgPlayBadgeDataURL(diamPx) {
+    const d = Math.max(16, Math.floor(diamPx));
+    const r = Math.floor(d/2);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${d}" height="${d}" viewBox="0 0 ${d} ${d}">
+        <circle cx="${r}" cy="${r}" r="${r}" fill="rgba(0,0,0,0.55)"/>
+        <polygon points="${Math.floor(r*0.55)},${Math.floor(r*0.35)} ${Math.floor(r*0.55)},${Math.floor(r*1.65)} ${Math.floor(r*1.55)},${r}" fill="#fff"/>
+      </svg>`;
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  }
+
+  function ensureRelative(container) {
+    const style = (container && container.style) ? container.style : null;
+    if (!style) return;
+    const cs = getComputedStyle(container).position;
+    if (cs !== 'relative' && cs !== 'absolute' && cs !== 'fixed') {
+      style.position = 'relative';
+      container.setAttribute(ATTR_REL_SET, '1');
+    }
+  }
+
+  function cardForPoster(posterImg) {
+    // Prefer the clickable <a href="/images/...">
+    const a = posterImg.closest('a[href*="/images/"]');
+    if (a) return a;
+
+    // Fallback: EdgeVideo wrapper, then its parent container
+    const edge = posterImg.closest('[class^="EdgeVideo_"]');
+    if (edge) return edge;
+
+    // Last resort: the poster's parent
+    return posterImg.parentElement || posterImg;
+  }
+
+  function overlayBadgeForPoster(posterImg) {
+    const card = cardForPoster(posterImg);
+    if (!card) return false;
+
+    if (card.querySelector(`img[${ATTR_OVERLAY}="badge"]`)) return false;
+
+    ensureRelative(card);
+
+    const rect = card.getBoundingClientRect();
+    const size = Math.min(Math.max(Math.floor(Math.min(rect.width, rect.height) * 0.12), 24), 56);
+
+    const img = new Image();
+    img.setAttribute(ATTR_OVERLAY, 'badge');
+    img.alt = '';
+    img.decoding = 'sync';
+    img.loading  = 'eager';
+    img.src = svgPlayBadgeDataURL(size);
+    img.style.cssText = [
+      'position:absolute',
+      'top:8px',
+      'right:8px',
+      `width:${size}px`,
+      `height:${size}px`,
+      'pointer-events:none',
+      'z-index:2147483000',
+      'display:block'
+    ].join(';');
+
+    card.appendChild(img);
+    return true;
+  }
+
+  function collectPosters(root) {
+    return $$(
+      '#gallery a[href*="/images/"] img[alt*="Video"], ' +
+      '#gallery [class^="EdgeVideo_"] img[alt*="Video"], ' +
+      'a[href*="/images/"] img[alt*="Video"]',
+      root
+    );
+  }
+
+  // Re-apply for ~durationMs with a MutationObserver + interval
+  async function guardOverlays(root, durationMs = 1200) {
+    let placed = 0, processed = 0;
+
+    const applyOnce = () => {
+      const posters = collectPosters(root);
+      for (const p of posters) {
+        processed++;
+        if (overlayBadgeForPoster(p)) placed++;
+      }
+    };
+
+    applyOnce();
+
+    const observer = new MutationObserver(() => applyOnce());
+    observer.observe(root || document, { childList: true, subtree: true });
+
+    const tick = setInterval(applyOnce, 120);
+
+    await new Promise(r => setTimeout(r, durationMs));
+
+    clearInterval(tick);
+    observer.disconnect();
+
+    LOG(`placed ${placed}/${processed} (guard ${durationMs}ms)`);
+    return { processed, placed };
+  }
+
+  function cleanupOverlays() {
+    document.querySelectorAll(`img[${ATTR_OVERLAY}="badge"]`).forEach(n => n.remove());
+    document.querySelectorAll(`[${ATTR_REL_SET}="1"]`).forEach(n => {
+      try { n.style.position = ''; } catch(_) {}
+      n.removeAttribute(ATTR_REL_SET);
+    });
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!msg) return;
+    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+      (async () => {
+        try {
+          const stats = await guardOverlays(getGalleryRoot(), 1200);
+          // tiny extra settle so BG will almost always catch overlays in paint
+          await new Promise(r => setTimeout(r, 80));
+          sendResponse(Object.assign({ ok: true }, stats));
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      })();
+      return true;
+    }
+    if (msg.type === 'ARCHIVER_STOP') {
+      cleanupOverlays();
+    }
+  });
+
+  window.addEventListener('beforeunload', cleanupOverlays, { once: true });
 })();
