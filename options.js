@@ -1,10 +1,19 @@
 function restoreOptions() {
   chrome.storage.local.get({
     scrollDelay: 300,
-    stabilityTimeout: 400
+    stabilityTimeout: 400,
+    filenameBase: 'title',
+    customFilename: '',
+    timestampFormat: 'YYYYMMDD_HHMMSS'
   }, opts => {
     document.getElementById('scrollDelay').value = opts.scrollDelay;
     document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
+    const baseRadio = document.querySelector(`input[name="filenameBase"][value="${opts.filenameBase}"]`);
+    if (baseRadio) baseRadio.checked = true;
+    document.getElementById('customFilename').value = opts.customFilename || '';
+    document.getElementById('customFilename').disabled = opts.filenameBase !== 'custom';
+    const tsRadio = document.querySelector(`input[name="timestampFormat"][value="${opts.timestampFormat}"]`);
+    if (tsRadio) tsRadio.checked = true;
   });
 
   chrome.commands.getAll(commands => {
@@ -23,13 +32,16 @@ function saveOptions() {
   const resetShortcut = document.getElementById('resetShortcut').value || 'Alt+Shift+R';
   const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
   const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
+  const filenameBase = document.querySelector('input[name="filenameBase"]:checked')?.value || 'title';
+  const customFilename = document.getElementById('customFilename').value || '';
+  const timestampFormat = document.querySelector('input[name="timestampFormat"]:checked')?.value || 'YYYYMMDD_HHMMSS';
 
   chrome.commands.update({ name: 'start', shortcut: startShortcut });
   chrome.commands.update({ name: 'save', shortcut: saveShortcut });
   chrome.commands.update({ name: 'startAndSave', shortcut: startSaveShortcut });
   chrome.commands.update({ name: 'reset', shortcut: resetShortcut });
 
-  chrome.storage.local.set({ scrollDelay, stabilityTimeout }, () => {
+  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat }, () => {
     const status = document.getElementById('status');
     status.textContent = 'Options saved.';
     setTimeout(() => status.textContent = '', 1500);
@@ -39,3 +51,10 @@ function saveOptions() {
 document.getElementById('save').addEventListener('click', saveOptions);
 
 document.addEventListener('DOMContentLoaded', restoreOptions);
+
+document.querySelectorAll('input[name="filenameBase"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const customInput = document.getElementById('customFilename');
+    customInput.disabled = document.querySelector('input[name="filenameBase"]:checked').value !== 'custom';
+  });
+});

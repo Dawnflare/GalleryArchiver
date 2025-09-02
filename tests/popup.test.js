@@ -19,7 +19,7 @@ global.URL.revokeObjectURL = jest.fn();
 
 global.chrome = {
   tabs: {
-    query: jest.fn(() => Promise.resolve([{ id: 123 }])),
+    query: jest.fn(() => Promise.resolve([{ id: 123, title: 'My Tab', url: 'https://example.com/page' }])),
     sendMessage: jest.fn(),
     reload: jest.fn()
   },
@@ -49,6 +49,9 @@ test('save button triggers page capture and download', async () => {
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
+  const fname = chrome.downloads.download.mock.calls[0][0].filename;
+  expect(fname.startsWith('My_Tab_')).toBe(true);
+  expect(fname.endsWith('.mhtml')).toBe(true);
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {

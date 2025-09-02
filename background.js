@@ -1,5 +1,37 @@
 // background.js (drop-in)
 
+function sanitize(str) {
+  return (str || '')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+}
+
+function formatTimestamp(fmt) {
+  const d = new Date();
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  const Y = pad(d.getFullYear(), 4);
+  const M = pad(d.getMonth() + 1);
+  const D = pad(d.getDate());
+  const h = pad(d.getHours());
+  const m = pad(d.getMinutes());
+  const s = pad(d.getSeconds());
+  switch (fmt) {
+    case 'YYYYMMDD_HHMMSS':
+      return `${Y}${M}${D}_${h}${m}${s}`;
+    case 'YYYYMMDD_HHMM':
+      return `${Y}${M}${D}_${h}${m}`;
+    case 'YYYYMMDD':
+      return `${Y}${M}${D}`;
+    case 'YYYY-MM-DD_HHMMSS':
+      return `${Y}-${M}-${D}_${h}${m}${s}`;
+    case 'YYYY-MM-DD':
+      return `${Y}-${M}-${D}`;
+    default:
+      return '';
+  }
+}
+
 async function saveMHTML(tabId) {
   if (!tabId) return;
   try {
@@ -20,10 +52,35 @@ async function saveMHTML(tabId) {
     }
     const base64 = btoa(binary);
     const dataUrl = `data:application/x-mimearchive;base64,${base64}`;
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    const tab = await chrome.tabs.get(tabId);
+    const opts = await new Promise(r => chrome.storage.local.get({
+      filenameBase: 'title',
+      customFilename: '',
+      timestampFormat: 'YYYYMMDD_HHMMSS'
+    }, r));
+    let baseName = '';
+    switch (opts.filenameBase) {
+      case 'url':
+        baseName = sanitize(tab.url);
+        break;
+      case 'domain':
+        try { baseName = sanitize(new URL(tab.url).hostname); } catch { baseName = ''; }
+        break;
+      case 'custom':
+        baseName = sanitize(opts.customFilename) || 'archive';
+        break;
+      case 'title':
+      default:
+        baseName = sanitize(tab.title) || 'archive';
+        break;
+    }
+    const ts = formatTimestamp(opts.timestampFormat);
+    const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+
     const downloadId = await chrome.downloads.download({
       url: dataUrl,
-      filename: `civitai-archive-${stamp}.mhtml`,
+      filename,
       saveAs: true
     });
 
