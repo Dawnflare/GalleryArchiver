@@ -36,10 +36,20 @@ function saveOptions() {
   const customFilename = document.getElementById('customFilename').value || '';
   const timestampFormat = document.querySelector('input[name="timestampFormat"]:checked')?.value || 'YYYYMMDD_HHMMSS';
 
-  chrome.commands.update({ name: 'start', shortcut: startShortcut });
-  chrome.commands.update({ name: 'save', shortcut: saveShortcut });
-  chrome.commands.update({ name: 'startAndSave', shortcut: startSaveShortcut });
-  chrome.commands.update({ name: 'reset', shortcut: resetShortcut });
+  const updateShortcut = (name, shortcut) => {
+    if (chrome.commands && typeof chrome.commands.update === 'function') {
+      try {
+        chrome.commands.update({ name, shortcut });
+      } catch (e) {
+        console.warn('commands.update failed', e);
+      }
+    }
+  };
+
+  updateShortcut('start', startShortcut);
+  updateShortcut('save', saveShortcut);
+  updateShortcut('startAndSave', startSaveShortcut);
+  updateShortcut('reset', resetShortcut);
 
   chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat }, () => {
     const status = document.getElementById('status');
