@@ -44,6 +44,15 @@ async function saveMHTML(tabId) {
   }
 }
 
+async function startAndSave(tabId) {
+  if (!tabId) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_START', autoSave: true });
+  } catch (e) {
+    console.error('startAndSave error:', e);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
 
@@ -53,6 +62,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch(e => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+
+  if (msg.type === 'ARCHIVER_START_AND_SAVE') {
+    (async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        startAndSave(tab.id);
+      }
+    })();
+  }
+
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
@@ -81,5 +100,8 @@ chrome.commands.onCommand.addListener(async (command) => {
   } else if (command === 'save') {
     await maybeOpenPopup();
     await saveMHTML(targetTabId);
+  } else if (command === 'startAndSave') {
+    await maybeOpenPopup();
+    await startAndSave(targetTabId);
   }
 });

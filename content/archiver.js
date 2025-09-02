@@ -19,6 +19,7 @@
     scrollEl: null,
     origHtmlStyle: '',
     origBodyStyle: '',
+    autoSave: false,
   };
 
   const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
@@ -309,10 +310,17 @@
       }
     }
     postState();
+    if (state.autoSave && state.captured >= state.maxItems) {
+      chrome.runtime.sendMessage({ type: 'ARCHIVER_SAVE_MHTML' });
+    }
+    state.autoSave = false;
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type === 'ARCHIVER_START') startRunning();
+    if (msg?.type === 'ARCHIVER_START') {
+      state.autoSave = !!msg.autoSave;
+      startRunning();
+    }
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
     if (msg?.type === 'ARCHIVER_RESET') {
       stopRunning(false);
