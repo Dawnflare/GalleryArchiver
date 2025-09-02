@@ -54,12 +54,12 @@ test('save command opens popup then triggers download', async () => {
 
   expect(chrome.action.openPopup).toHaveBeenCalled();
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-  expect(chrome.downloads.search).toHaveBeenCalled();
+  expect(chrome.downloads.search).not.toHaveBeenCalled();
   const opts = chrome.downloads.download.mock.calls[0][0];
   expect(opts.url.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
-  expect(opts.filename.startsWith('/prev/path/')).toBe(true);
   expect(opts.filename.includes('My_Tab_')).toBe(true);
   expect(opts.filename.endsWith('.mhtml')).toBe(true);
-  expect(opts.saveAs).toBe(false);
+  expect(opts.filename).not.toMatch(/[\\\/]/);
+  expect(opts.saveAs).toBe(true);
 });
 

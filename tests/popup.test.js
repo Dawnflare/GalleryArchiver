@@ -48,16 +48,16 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
-  expect(chrome.downloads.search).toHaveBeenCalled();
+  expect(chrome.downloads.search).not.toHaveBeenCalled();
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
   const opts = chrome.downloads.download.mock.calls[0][0];
-  expect(opts.filename.startsWith('/another/path/')).toBe(true);
   expect(opts.filename.includes('My_Tab_')).toBe(true);
   expect(opts.filename.endsWith('.mhtml')).toBe(true);
-  expect(opts.saveAs).toBe(false);
+  expect(opts.filename).not.toMatch(/[\\\/]/);
+  expect(opts.saveAs).toBe(true);
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {

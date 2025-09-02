@@ -41,21 +41,6 @@ function joinPath(dir, name) {
   return dir.replace(/[\\\/]+$/, '') + sep + name;
 }
 
-async function getLastDownloadDir() {
-  try {
-    const [item] = await chrome.downloads.search({ orderBy: ['-startTime'], limit: 1 });
-    if (item?.filename) {
-      const idx = Math.max(item.filename.lastIndexOf('/'), item.filename.lastIndexOf('\\'));
-      if (idx !== -1) {
-        return item.filename.slice(0, idx);
-      }
-    }
-  } catch (e) {
-    console.warn('failed to get last download dir:', e);
-  }
-  return '';
-}
-
 async function sendToContent(type, payload={}) {
   const tab = await getActiveTab();
   return chrome.tabs.sendMessage(tab.id, { type, payload });
@@ -151,18 +136,19 @@ document.getElementById('save').addEventListener('click', async () => {
         break;
     }
       const ts = formatTimestamp(opts.timestampFormat);
-      const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
-      let dir = '';
+      const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+      let filename = baseFilename;
+      let saveAs = false;
       if (opts.saveLocation === 'custom' && opts.customSavePath) {
-        dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
+        const dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
+        filename = joinPath(dir, baseFilename);
       } else if (opts.saveLocation === 'last') {
-        dir = await getLastDownloadDir();
+        saveAs = true;
       }
-      const fullName = joinPath(dir, filename);
       const downloadId = await chrome.downloads.download({
         url,
-        filename: fullName,
-        saveAs: false
+        filename,
+        saveAs
       });
 
     // After download completes, stop (same as your branch)
