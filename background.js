@@ -44,13 +44,10 @@ async function saveMHTML(tabId) {
   }
 }
 
-const autoSaveTabs = new Set();
-
 async function startAndSave(tabId) {
   if (!tabId) return;
-  autoSaveTabs.add(tabId);
   try {
-    await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_START' });
+    await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_START', autoSave: true });
   } catch (e) {
     console.error('startAndSave error:', e);
   }
@@ -75,13 +72,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })();
   }
 
-  if (msg.type === 'ARCHIVER_STATE') {
-    const tabId = sender?.tab?.id;
-    if (tabId && autoSaveTabs.has(tabId) && msg.captured >= msg.maxItems && !msg.running) {
-      autoSaveTabs.delete(tabId);
-      saveMHTML(tabId);
-    }
-  }
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
