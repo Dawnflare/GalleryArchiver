@@ -1,9 +1,9 @@
 document.body.innerHTML = `
-  <button id="start"></button><span id="startShortcutLabel"></span>
+  <span id="startShortcutLabel"></span><button id="start"></button>
+  <span id="saveShortcutLabel"></span><button id="save"></button>
+  <span id="startSaveShortcutLabel"></span><button id="startSave"></button>
+  <span id="resetShortcutLabel"></span><button id="reset"></button>
   <button id="stop"></button>
-  <button id="reset"></button><span id="resetShortcutLabel"></span>
-  <button id="startSave"></button><span id="startSaveShortcutLabel"></span>
-  <button id="save"></button><span id="saveShortcutLabel"></span>
   <input id="maxItems" />
   <span id="seen"></span>
   <span id="captured"></span>

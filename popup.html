@@ -5,23 +5,29 @@
     <title>Gallery Archiver by Dawnflare</title>
     <style>
       body { font-family: system-ui, Arial, sans-serif; margin: 12px; min-width: 260px; color: #eee; background: #222; }
-      button { margin-right: 8px; margin-bottom: 8px; }
+      button { margin-left: 0; margin-bottom: 8px; }
       label { display: block; margin-top: 8px; }
       input[type="number"] { width: 80px; }
-      .shortcut { font-size: 0.8em; color: #888; margin-left: 4px; }
+      .shortcut { font-size: 0.8em; color: #888; margin-right: 4px; }
       .row { margin: 6px 0; }
+      .buttons { text-align: right; }
+      .button-wrapper { margin-left: 8px; }
+      .button-wrapper:first-child { margin-left: 0; }
+      .right { text-align: right; }
       .stat { font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
-    <div class="row">
-      <button id="start">Start</button><span id="startShortcutLabel" class="shortcut"></span>
-      <button id="stop">Stop</button>
-      <button id="reset">Reset</button><span id="resetShortcutLabel" class="shortcut"></span>
+    <div class="row buttons">
+      <span class="button-wrapper"><span id="startShortcutLabel" class="shortcut"></span><button id="start">Start</button></span>
+      <span class="button-wrapper"><span id="saveShortcutLabel" class="shortcut"></span><button id="save">Save as MHTML</button></span>
     </div>
-    <div class="row">
-      <button id="startSave">Start and Save</button><span id="startSaveShortcutLabel" class="shortcut"></span>
-      <button id="save">Save as HTML</button><span id="saveShortcutLabel" class="shortcut"></span>
+    <div class="row buttons">
+      <span class="button-wrapper"><span id="startSaveShortcutLabel" class="shortcut"></span><button id="startSave">Start and Save</button></span>
+    </div>
+    <div class="row buttons">
+      <span class="button-wrapper"><span id="resetShortcutLabel" class="shortcut"></span><button id="reset">Reset</button></span>
+      <span class="button-wrapper"><button id="stop">Stop</button></span>
     </div>
     <div class="row">
       <progress id="progress" value="0" max="0" style="width:100%"></progress>
@@ -30,7 +36,7 @@
     <div class="row stat">
       Seen: <span id="seen">0</span> &nbsp; Captured: <span id="captured">0</span> &nbsp; Deduped: <span id="deduped">0</span> &nbsp; Total: <span id="total">0</span>
     </div>
-    <div class="row">
+    <div class="row right">
       <label>Max items: <input id="maxItems" type="number" min="10" max="100000" step="10" value="200"></label>
     </div>
     <script src="popup.js"></script>
