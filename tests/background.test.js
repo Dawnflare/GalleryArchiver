@@ -6,13 +6,15 @@ global.chrome = {
   action: { openPopup: jest.fn(() => Promise.resolve()) },
   tabs: {
     query: jest.fn(() => Promise.resolve([{ id: 321 }])),
+    get: jest.fn(() => Promise.resolve({ id: 321, title: 'My Tab', url: 'https://example.com/path' })),
     sendMessage,
     reload: jest.fn(),
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(Uint8Array.from([116,101,115,116]).buffer) })) },
   downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
-  commands: { onCommand: { addListener: jest.fn() } }
+  commands: { onCommand: { addListener: jest.fn() } },
+  storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)) } }
 };
 
 require('../background.js');
@@ -49,5 +51,8 @@ test('save command opens popup then triggers download', async () => {
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
   const urlArg = chrome.downloads.download.mock.calls[0][0].url;
   expect(urlArg.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
+  const fname = chrome.downloads.download.mock.calls[0][0].filename;
+  expect(fname.startsWith('My_Tab_')).toBe(true);
+  expect(fname.endsWith('.mhtml')).toBe(true);
 });
 

@@ -23,6 +23,22 @@
       <label>Scroll delay (ms): <input id="scrollDelay" type="number" min="50" max="5000" step="50"></label>
       <label>Stability timeout (ms): <input id="stabilityTimeout" type="number" min="100" max="5000" step="100"></label>
     </div>
+    <div>
+      <p>Filename base:</p>
+      <label><input type="radio" name="filenameBase" value="title" checked> Browser tab title</label>
+      <label><input type="radio" name="filenameBase" value="url"> Website URL</label>
+      <label><input type="radio" name="filenameBase" value="domain"> Domain name only</label>
+      <label><input type="radio" name="filenameBase" value="custom"> Custom: <input id="customFilename" type="text"></label>
+    </div>
+    <div>
+      <p>Timestamp format:</p>
+      <label><input type="radio" name="timestampFormat" value="none"> No time stamp</label>
+      <label><input type="radio" name="timestampFormat" value="YYYYMMDD_HHMMSS" checked> YYYYMMDD_HHMMSS</label>
+      <label><input type="radio" name="timestampFormat" value="YYYYMMDD_HHMM"> YYYYMMDD_HHMM</label>
+      <label><input type="radio" name="timestampFormat" value="YYYYMMDD"> YYYYMMDD</label>
+      <label><input type="radio" name="timestampFormat" value="YYYY-MM-DD_HHMMSS"> YYYY-MM-DD_HHMMSS</label>
+      <label><input type="radio" name="timestampFormat" value="YYYY-MM-DD"> YYYY-MM-DD</label>
+    </div>
     <button id="save">Save</button>
     <div id="status"></div>
     <script src="options.js"></script>
