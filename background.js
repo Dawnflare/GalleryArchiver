@@ -53,8 +53,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
+  const targetTabId = tab.id;
 
-  if (command === 'start') {
+  const maybeOpenPopup = async () => {
     try {
       if (chrome.action?.openPopup) {
         await chrome.action.openPopup();
@@ -62,12 +63,18 @@ chrome.commands.onCommand.addListener(async (command) => {
     } catch (e) {
       console.warn('openPopup failed:', e);
     }
-    chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_START' });
+  };
+
+  if (command === 'start') {
+    await maybeOpenPopup();
+    chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_START' });
   } else if (command === 'reset') {
-    await chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_RESET', payload: {} });
-    await chrome.tabs.reload(tab.id);
+    await maybeOpenPopup();
+    await chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_RESET', payload: {} });
+    await chrome.tabs.reload(targetTabId);
     chrome.runtime.reload();
   } else if (command === 'save') {
-    await saveMHTML(tab.id);
+    await maybeOpenPopup();
+    await saveMHTML(targetTabId);
   }
 });
