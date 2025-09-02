@@ -51,6 +51,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
+  // Open popup so user sees action
+  try {
+    if (chrome.action?.openPopup) {
+      await chrome.action.openPopup();
+    }
+  } catch (e) {
+    console.warn('openPopup failed:', e);
+  }
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
   if (command === 'start') {

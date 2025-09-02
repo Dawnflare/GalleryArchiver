@@ -30,7 +30,7 @@
     },
     "reset": {
       "suggested_key": {
-        "default": "Alt+F5"
+        "default": "Alt+Shift+R"
       },
       "description": "Reset and reload"
     },

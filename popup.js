@@ -17,7 +17,7 @@ function restoreOptions() {
   chrome.commands.getAll(commands => {
     const find = name => commands.find(c => c.name === name)?.shortcut || '';
     document.getElementById('startShortcutLabel').textContent = `(${find('start') || 'Alt+1'})`;
-    document.getElementById('resetShortcutLabel').textContent = `(${find('reset') || 'Alt+F5'})`;
+    document.getElementById('resetShortcutLabel').textContent = `(${find('reset') || 'Alt+Shift+R'})`;
     document.getElementById('saveShortcutLabel').textContent = `(${find('save') || 'Alt+2'})`;
   });
 }

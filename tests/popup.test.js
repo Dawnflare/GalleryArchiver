@@ -27,7 +27,7 @@ global.chrome = {
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
     { name: 'start', shortcut: 'Alt+1' },
-    { name: 'reset', shortcut: 'Alt+F5' },
+    { name: 'reset', shortcut: 'Alt+Shift+R' },
     { name: 'save', shortcut: 'Alt+2' }
   ])) }
 };
@@ -69,6 +69,6 @@ test('reset button stops autoscroll, reloads the page and extension', async () =
 test('displays shortcut labels from commands API', async () => {
   await Promise.resolve();
   expect(document.getElementById('startShortcutLabel').textContent).toBe('(Alt+1)');
-  expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+F5)');
+  expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+Shift+R)');
   expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
 });
