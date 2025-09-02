@@ -94,16 +94,27 @@ document.querySelectorAll('input[name="saveLocation"]').forEach(r => {
 });
 
 document.getElementById('browseSavePath')?.addEventListener('click', () => {
-  const picker = document.getElementById('customSavePathPicker');
-  picker?.click();
-});
-
-document.getElementById('customSavePathPicker')?.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (file) {
-    const path = file.path || file.webkitRelativePath || '';
-    const dir = path.replace(/[/\\][^/\\]*$/, '');
-    const input = document.getElementById('customSavePath');
-    if (input) input.value = dir;
-  }
+  let downloadId;
+  const listener = (item, suggest) => {
+    if (item.id === downloadId) {
+      const dir = item.filename.replace(/[\\/][^\\/]*$/, '');
+      const input = document.getElementById('customSavePath');
+      if (input) input.value = dir;
+      chrome.downloads.cancel(downloadId);
+      chrome.downloads.erase({ id: downloadId });
+      chrome.downloads.onDeterminingFilename.removeListener(listener);
+      if (typeof suggest === 'function') suggest({ filename: item.filename });
+    }
+  };
+  chrome.downloads.onDeterminingFilename.addListener(listener);
+  chrome.downloads.download({
+    url: 'data:text/plain,',
+    filename: 'folder-picker.txt',
+    saveAs: true
+  }, id => {
+    downloadId = id;
+    if (id === undefined) {
+      chrome.downloads.onDeterminingFilename.removeListener(listener);
+    }
+  });
 });

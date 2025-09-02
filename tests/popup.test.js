@@ -60,6 +60,23 @@ test('save button triggers page capture and download', async () => {
   expect(opts.saveAs).toBe(true);
 });
 
+test('save uses custom directory when configured', async () => {
+  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
+    ...defaults,
+    saveLocation: 'custom',
+    customSavePath: '/tmp/mydir'
+  }));
+  chrome.downloads.download.mockClear();
+  document.getElementById('save').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
+  const opts = chrome.downloads.download.mock.calls[0][0];
+  expect(opts.filename.startsWith('/tmp/mydir/')).toBe(true);
+  expect(opts.saveAs).toBe(false);
+});
+
 test('reset button stops autoscroll, reloads the page and extension', async () => {
   chrome.tabs.reload.mockClear();
   chrome.tabs.sendMessage.mockClear();

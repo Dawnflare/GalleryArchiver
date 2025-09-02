@@ -9,13 +9,21 @@ document.body.innerHTML = `
   <input type="radio" name="filenameBase" value="custom" checked />
   <input id="customFilename" value="my page" />
   <input type="radio" name="timestampFormat" value="YYYYMMDD" checked />
+  <input id="customSavePath" />
+  <button id="browseSavePath"></button>
   <button id="save"></button>
   <div id="status"></div>
 `;
 
 global.chrome = {
-  storage: { local: { get: jest.fn((defs, cb) => cb(defs)), set: jest.fn() } },
-  commands: { getAll: jest.fn(cb => cb([])) }
+  storage: { local: { get: jest.fn((defs, cb) => cb({ ...defs, saveLocation: 'custom' })), set: jest.fn() } },
+  commands: { getAll: jest.fn(cb => cb([])) },
+  downloads: {
+    download: jest.fn((opts, cb) => cb(1)),
+    onDeterminingFilename: { addListener: jest.fn(), removeListener: jest.fn() },
+    cancel: jest.fn(),
+    erase: jest.fn()
+  }
 };
 
 require('../options.js');
@@ -38,4 +46,13 @@ test('saves options without commands.update', () => {
     saveLocation: 'last',
     customSavePath: ''
   }, expect.any(Function));
+});
+
+test('browse button captures folder path', () => {
+  document.getElementById('browseSavePath').click();
+  const handler = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  handler({ id: 1, filename: '/home/user/temp/dummy.txt' }, jest.fn());
+  expect(document.getElementById('customSavePath').value).toBe('/home/user/temp');
+  expect(chrome.downloads.cancel).toHaveBeenCalledWith(1);
+  expect(chrome.downloads.erase).toHaveBeenCalledWith({ id: 1 });
 });

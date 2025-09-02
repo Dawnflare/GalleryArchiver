@@ -92,3 +92,17 @@ test('stores and reuses last download directory', async () => {
   expect(opts.saveAs).toBe(false);
 });
 
+test('uses custom save path when configured', async () => {
+  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
+    ...defaults,
+    saveLocation: 'custom',
+    customSavePath: '/my/custom/dir'
+  }));
+  chrome.downloads.download.mockClear();
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  await handler('save');
+  const opts = chrome.downloads.download.mock.calls[0][0];
+  expect(opts.filename.startsWith('/my/custom/dir/')).toBe(true);
+  expect(opts.saveAs).toBe(false);
+});
+

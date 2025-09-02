@@ -89,8 +89,7 @@ async function saveMHTML(tabId) {
     let filename = baseFilename;
     let saveAs = false;
     if (opts.saveLocation === 'custom' && opts.customSavePath) {
-      const dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
-      filename = joinPath(dir, baseFilename);
+      filename = joinPath(opts.customSavePath, baseFilename);
     } else if (opts.saveLocation === 'last') {
       if (opts.lastDownloadDir) {
         filename = joinPath(opts.lastDownloadDir, baseFilename);
