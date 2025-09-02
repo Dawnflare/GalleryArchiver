@@ -24,7 +24,10 @@ global.chrome = {
     reload: jest.fn()
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)) },
+  downloads: {
+    download: jest.fn(() => Promise.resolve(1)),
+    search: jest.fn(() => Promise.resolve([{ filename: '/another/path/old.mhtml' }]))
+  },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
@@ -45,13 +48,16 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
+  expect(chrome.downloads.search).toHaveBeenCalled();
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
-  const fname = chrome.downloads.download.mock.calls[0][0].filename;
-  expect(fname.includes('My_Tab_')).toBe(true);
-  expect(fname.endsWith('.mhtml')).toBe(true);
+  const opts = chrome.downloads.download.mock.calls[0][0];
+  expect(opts.filename.startsWith('/another/path/')).toBe(true);
+  expect(opts.filename.includes('My_Tab_')).toBe(true);
+  expect(opts.filename.endsWith('.mhtml')).toBe(true);
+  expect(opts.saveAs).toBe(false);
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {

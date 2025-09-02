@@ -32,6 +32,27 @@ function formatTimestamp(fmt) {
   }
 }
 
+function joinPath(dir, name) {
+  if (!dir) return name;
+  const sep = dir.includes('\\') ? '\\' : '/';
+  return dir.replace(/[\\\/]+$/, '') + sep + name;
+}
+
+async function getLastDownloadDir() {
+  try {
+    const [item] = await chrome.downloads.search({ orderBy: ['-startTime'], limit: 1 });
+    if (item?.filename) {
+      const idx = Math.max(item.filename.lastIndexOf('/'), item.filename.lastIndexOf('\\'));
+      if (idx !== -1) {
+        return item.filename.slice(0, idx);
+      }
+    }
+  } catch (e) {
+    console.warn('failed to get last download dir:', e);
+  }
+  return '';
+}
+
 async function saveMHTML(tabId) {
   if (!tabId) return;
   try {
@@ -80,19 +101,17 @@ async function saveMHTML(tabId) {
     const ts = formatTimestamp(opts.timestampFormat);
     const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
     let dir = '';
-    let saveAs = true;
     if (opts.saveLocation === 'custom' && opts.customSavePath) {
       dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
-      saveAs = false;
-    } else if (opts.saveLocation === 'default') {
-      saveAs = false;
+    } else if (opts.saveLocation === 'last') {
+      dir = await getLastDownloadDir();
     }
-    const fullName = dir ? `${dir.replace(/[\\/]+$/, '')}/${filename}` : filename;
+    const fullName = joinPath(dir, filename);
 
     const downloadId = await chrome.downloads.download({
       url: dataUrl,
       filename: fullName,
-      saveAs
+      saveAs: false
     });
 
     const onChanged = delta => {
