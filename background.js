@@ -10,12 +10,19 @@ async function saveMHTML(tabId) {
       console.warn('[BG] PREPARE failed (continuing anyway):', e);
     }
 
-    const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId });
-    const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
-    const url = URL.createObjectURL(blob);
+    const mhtmlBlob = await chrome.pageCapture.saveAsMHTML({ tabId });
+    const ab = await mhtmlBlob.arrayBuffer();
+    const bytes = new Uint8Array(ab);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    const base64 = btoa(binary);
+    const dataUrl = `data:application/x-mimearchive;base64,${base64}`;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const downloadId = await chrome.downloads.download({
-      url,
+      url: dataUrl,
       filename: `civitai-archive-${stamp}.mhtml`,
       saveAs: true
     });
@@ -24,7 +31,6 @@ async function saveMHTML(tabId) {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
         chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
       }
     };
 
@@ -32,7 +38,6 @@ async function saveMHTML(tabId) {
       chrome.downloads.onChanged.addListener(onChanged);
     } else {
       chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
   } catch (e) {
     console.error('[BG] save flow error:', e);

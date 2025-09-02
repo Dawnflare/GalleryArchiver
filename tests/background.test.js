@@ -1,5 +1,4 @@
-global.URL.createObjectURL = jest.fn(() => 'blob:fake');
-global.URL.revokeObjectURL = jest.fn();
+global.btoa = str => Buffer.from(str, 'binary').toString('base64');
 
 const sendMessage = jest.fn(() => Promise.resolve());
 
@@ -10,7 +9,7 @@ global.chrome = {
     sendMessage,
     reload: jest.fn(),
   },
-  pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
+  pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(Uint8Array.from([116,101,115,116]).buffer) })) },
   downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
   commands: { onCommand: { addListener: jest.fn() } }
@@ -48,5 +47,7 @@ test('save command opens popup then triggers download', async () => {
 
   expect(chrome.action.openPopup).toHaveBeenCalled();
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
+  const urlArg = chrome.downloads.download.mock.calls[0][0].url;
+  expect(urlArg.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
 });
 
