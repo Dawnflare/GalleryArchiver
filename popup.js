@@ -138,20 +138,22 @@ document.getElementById('save').addEventListener('click', async () => {
     }
       const ts = formatTimestamp(opts.timestampFormat);
       const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+
       let saveAs = opts.saveLocation === 'last';
-      let targetDir = '';
+      let targetPath = baseFilename;
       if (opts.saveLocation === 'custom') {
         if (opts.customSavePath) {
-          targetDir = opts.customSavePath;
+          saveAs = false;
+          targetPath = joinPath(opts.customSavePath, baseFilename);
         } else {
           saveAs = true;
+          targetPath = baseFilename;
         }
       }
 
       let downloadId;
       let listener;
-      if (targetDir && chrome.downloads.onDeterminingFilename?.addListener) {
-        const targetPath = joinPath(targetDir, baseFilename).replace(/\\/g, '/');
+      if (chrome.downloads.onDeterminingFilename?.addListener) {
         listener = (item, suggest) => {
           if (!downloadId || item.id === downloadId) {
             if (typeof suggest === 'function') {
@@ -165,7 +167,6 @@ document.getElementById('save').addEventListener('click', async () => {
 
       downloadId = await chrome.downloads.download({
         url,
-        filename: baseFilename,
         saveAs
       });
       if (downloadId === undefined && listener) {

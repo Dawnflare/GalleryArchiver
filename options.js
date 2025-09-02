@@ -19,12 +19,9 @@ function restoreOptions() {
     const saveRadio = document.querySelector(`input[name="saveLocation"][value="${opts.saveLocation}"]`);
     if (saveRadio) saveRadio.checked = true;
     const customPathInput = document.getElementById('customSavePath');
-    const browseBtn = document.getElementById('browseSavePath');
     if (customPathInput) {
       customPathInput.value = opts.customSavePath || '';
-      const isCustom = opts.saveLocation !== 'custom';
-      customPathInput.disabled = isCustom;
-      if (browseBtn) browseBtn.disabled = isCustom;
+      customPathInput.disabled = opts.saveLocation !== 'custom';
     }
   });
 
@@ -86,30 +83,7 @@ document.querySelectorAll('input[name="filenameBase"]').forEach(r => {
 document.querySelectorAll('input[name="saveLocation"]').forEach(r => {
   r.addEventListener('change', () => {
     const customInput = document.getElementById('customSavePath');
-    const browseBtn = document.getElementById('browseSavePath');
     const isCustom = document.querySelector('input[name="saveLocation"]:checked').value !== 'custom';
     customInput.disabled = isCustom;
-    browseBtn.disabled = isCustom;
-  });
-});
-
-document.getElementById('browseSavePath')?.addEventListener('click', () => {
-  chrome.downloads.download({
-    url: 'data:text/plain,',
-    filename: 'folder-picker.txt',
-    saveAs: true
-  }, id => {
-    if (id === undefined) return;
-    const onChanged = delta => {
-      if (delta.id === id && delta.filename) {
-        chrome.downloads.onChanged.removeListener(onChanged);
-        const dir = delta.filename.current.replace(/[\\/][^\\/]*$/, '');
-        const input = document.getElementById('customSavePath');
-        if (input) input.value = dir;
-        chrome.downloads.cancel(id);
-        chrome.downloads.erase({ id });
-      }
-    };
-    chrome.downloads.onChanged.addListener(onChanged);
   });
 });

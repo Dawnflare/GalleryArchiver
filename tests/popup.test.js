@@ -56,31 +56,37 @@ test('save button triggers page capture and download', async () => {
   expect(blobArg.type).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
   const opts = chrome.downloads.download.mock.calls[0][0];
-  expect(opts.filename.includes('My_Tab_')).toBe(true);
-  expect(opts.filename.endsWith('.mhtml')).toBe(true);
-  expect(opts.filename).not.toMatch(/[\\\/]/);
+  expect(opts.filename).toBeUndefined();
   expect(opts.saveAs).toBe(true);
+  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest = jest.fn();
+  listener({ id: 1 }, suggest);
+  expect(suggest).toHaveBeenCalledWith({ filename: expect.stringMatching(/^My_Tab_.*\.mhtml$/) });
 });
 
 test('save uses custom directory when configured', async () => {
-  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
+  chrome.storage.local.get.mockImplementation((defaults, cb) => cb({
     ...defaults,
     saveLocation: 'custom',
     customSavePath: '/tmp/mydir'
   }));
   chrome.downloads.download.mockClear();
+  chrome.downloads.onDeterminingFilename.addListener.mockClear();
   document.getElementById('save').click();
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
-  const opts = chrome.downloads.download.mock.calls[0][0];
-  expect(opts.filename).toMatch(/^My_Tab_.*\.mhtml$/);
-  expect(opts.saveAs).toBe(false);
-  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
-  const suggest = jest.fn();
-  listener({ id: 1 }, suggest);
-  expect(suggest).toHaveBeenCalledWith({ filename: expect.stringMatching(/^\/tmp\/mydir\/My_Tab_.*\.mhtml$/) });
+  const opts2 = chrome.downloads.download.mock.calls[0][0];
+  expect(opts2.filename).toBeUndefined();
+  expect(opts2.saveAs).toBe(false);
+  const listener2 = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest2 = jest.fn();
+  listener2({ id: 1 }, suggest2);
+  expect(suggest2).toHaveBeenCalledWith({ filename: expect.stringMatching(/^\/tmp\/mydir\/My_Tab_.*\.mhtml$/) });
+
+  // restore default get implementation
+  chrome.storage.local.get.mockImplementation((defaults, cb) => cb(defaults));
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {
