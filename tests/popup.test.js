@@ -26,7 +26,9 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: {
     download: jest.fn(() => Promise.resolve(1)),
-    search: jest.fn(() => Promise.resolve([{ filename: '/another/path/old.mhtml' }]))
+    search: jest.fn(() => Promise.resolve([{ filename: '/another/path/old.mhtml' }])),
+    onChanged: { addListener: jest.fn(), removeListener: jest.fn() },
+    onDeterminingFilename: { addListener: jest.fn(), removeListener: jest.fn() }
   },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
@@ -73,8 +75,12 @@ test('save uses custom directory when configured', async () => {
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   const opts = chrome.downloads.download.mock.calls[0][0];
-  expect(opts.filename.startsWith('/tmp/mydir/')).toBe(true);
+  expect(opts.filename).toMatch(/^My_Tab_.*\.mhtml$/);
   expect(opts.saveAs).toBe(false);
+  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest = jest.fn();
+  listener({ id: 1 }, suggest);
+  expect(suggest).toHaveBeenCalledWith({ filename: expect.stringMatching(/^\/tmp\/mydir\/My_Tab_.*\.mhtml$/) });
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {

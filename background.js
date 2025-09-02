@@ -86,35 +86,50 @@ async function saveMHTML(tabId) {
     }
     const ts = formatTimestamp(opts.timestampFormat);
     const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
-    let filename = baseFilename;
     let saveAs = false;
+    let targetDir = '';
     if (opts.saveLocation === 'custom' && opts.customSavePath) {
-      filename = joinPath(opts.customSavePath, baseFilename);
+      targetDir = opts.customSavePath;
     } else if (opts.saveLocation === 'last') {
       if (opts.lastDownloadDir) {
-        filename = joinPath(opts.lastDownloadDir, baseFilename);
+        targetDir = opts.lastDownloadDir;
       } else {
         saveAs = true;
       }
+    } else {
+      saveAs = opts.saveLocation === 'last';
     }
 
-    const downloadId = await chrome.downloads.download({
+    let downloadId;
+    let listener;
+    if (targetDir && chrome.downloads.onDeterminingFilename?.addListener) {
+      listener = (item, suggest) => {
+        if (!downloadId || item.id === downloadId) {
+          if (typeof suggest === 'function') {
+            suggest({ filename: joinPath(targetDir, baseFilename) });
+          }
+          chrome.downloads.onDeterminingFilename.removeListener(listener);
+        }
+      };
+      chrome.downloads.onDeterminingFilename.addListener(listener);
+    }
+
+    downloadId = await chrome.downloads.download({
       url: dataUrl,
-      filename,
+      filename: baseFilename,
       saveAs
     });
+    if (downloadId === undefined && listener) {
+      chrome.downloads.onDeterminingFilename.removeListener(listener);
+    }
 
     const onChanged = async delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
         try {
           const [item] = await chrome.downloads.search({ id: downloadId });
-          const dir = item?.filename
-            ?.replace(/[\\/][^\\/]*$/, '')
-            .replace(/^([a-zA-Z]:)?[\\/]+/, '');
-          if (dir) {
-            chrome.storage.local.set({ lastDownloadDir: dir });
-          }
+          const dir = item?.filename?.replace(/[\\/][^\\/]*$/, '');
+          if (dir) chrome.storage.local.set({ lastDownloadDir: dir });
         } catch (err) {
           console.warn('failed to capture last dir', err);
         }

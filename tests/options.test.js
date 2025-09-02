@@ -20,7 +20,7 @@ global.chrome = {
   commands: { getAll: jest.fn(cb => cb([])) },
   downloads: {
     download: jest.fn((opts, cb) => cb(1)),
-    onDeterminingFilename: { addListener: jest.fn(), removeListener: jest.fn() },
+    onChanged: { addListener: jest.fn(), removeListener: jest.fn() },
     cancel: jest.fn(),
     erase: jest.fn()
   }
@@ -50,8 +50,8 @@ test('saves options without commands.update', () => {
 
 test('browse button captures folder path', () => {
   document.getElementById('browseSavePath').click();
-  const handler = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
-  handler({ id: 1, filename: '/home/user/temp/dummy.txt' }, jest.fn());
+  const handler = chrome.downloads.onChanged.addListener.mock.calls[0][0];
+  handler({ id: 1, filename: { current: '/home/user/temp/dummy.txt' } });
   expect(document.getElementById('customSavePath').value).toBe('/home/user/temp');
   expect(chrome.downloads.cancel).toHaveBeenCalledWith(1);
   expect(chrome.downloads.erase).toHaveBeenCalledWith({ id: 1 });

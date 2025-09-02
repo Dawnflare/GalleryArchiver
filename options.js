@@ -94,27 +94,22 @@ document.querySelectorAll('input[name="saveLocation"]').forEach(r => {
 });
 
 document.getElementById('browseSavePath')?.addEventListener('click', () => {
-  let downloadId;
-  const listener = (item, suggest) => {
-    if (item.id === downloadId) {
-      const dir = item.filename.replace(/[\\/][^\\/]*$/, '');
-      const input = document.getElementById('customSavePath');
-      if (input) input.value = dir;
-      chrome.downloads.cancel(downloadId);
-      chrome.downloads.erase({ id: downloadId });
-      chrome.downloads.onDeterminingFilename.removeListener(listener);
-      if (typeof suggest === 'function') suggest({ filename: item.filename });
-    }
-  };
-  chrome.downloads.onDeterminingFilename.addListener(listener);
   chrome.downloads.download({
     url: 'data:text/plain,',
     filename: 'folder-picker.txt',
     saveAs: true
   }, id => {
-    downloadId = id;
-    if (id === undefined) {
-      chrome.downloads.onDeterminingFilename.removeListener(listener);
-    }
+    if (id === undefined) return;
+    const onChanged = delta => {
+      if (delta.id === id && delta.filename) {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        const dir = delta.filename.current.replace(/[\\/][^\\/]*$/, '');
+        const input = document.getElementById('customSavePath');
+        if (input) input.value = dir;
+        chrome.downloads.cancel(id);
+        chrome.downloads.erase({ id });
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
   });
 });
