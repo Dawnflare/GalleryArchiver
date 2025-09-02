@@ -11,7 +11,7 @@ global.chrome = {
     reload: jest.fn(),
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(Uint8Array.from([116,101,115,116]).buffer) })) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
+  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() }, search: jest.fn((query, cb) => cb([{ filename: '/tmp/prev.mhtml' }])) },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
   commands: { onCommand: { addListener: jest.fn() } },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)) } }
@@ -52,7 +52,7 @@ test('save command opens popup then triggers download', async () => {
   const urlArg = chrome.downloads.download.mock.calls[0][0].url;
   expect(urlArg.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
   const fname = chrome.downloads.download.mock.calls[0][0].filename;
-  expect(fname.startsWith('My_Tab_')).toBe(true);
+  expect(fname.includes('My_Tab_')).toBe(true);
   expect(fname.endsWith('.mhtml')).toBe(true);
 });
 

@@ -34,6 +34,8 @@ test('saves options without commands.update', () => {
     stabilityTimeout: 400,
     filenameBase: 'custom',
     customFilename: 'my page',
-    timestampFormat: 'YYYYMMDD'
+    timestampFormat: 'YYYYMMDD',
+    saveLocation: 'last',
+    customSavePath: ''
   }, expect.any(Function));
 });

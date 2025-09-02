@@ -109,7 +109,9 @@ document.getElementById('save').addEventListener('click', async () => {
     const opts = await new Promise(r => chrome.storage.local.get({
       filenameBase: 'title',
       customFilename: '',
-      timestampFormat: 'YYYYMMDD_HHMMSS'
+      timestampFormat: 'YYYYMMDD_HHMMSS',
+      saveLocation: 'last',
+      customSavePath: ''
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -129,10 +131,22 @@ document.getElementById('save').addEventListener('click', async () => {
     }
     const ts = formatTimestamp(opts.timestampFormat);
     const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
-
+    let dir = '';
+    if (opts.saveLocation === 'custom' && opts.customSavePath) {
+      dir = opts.customSavePath;
+    } else if (opts.saveLocation === 'last') {
+      try {
+        const recent = await new Promise(res => chrome.downloads.search ? chrome.downloads.search({ limit: 1, orderBy: ['-startTime'] }, res) : res([]));
+        const path = recent?.[0]?.filename;
+        if (path) dir = path.replace(/[/\\][^/\\]*$/, '');
+      } catch (e) {
+        console.warn('Could not determine last download path', e);
+      }
+    }
+    const fullName = dir ? `${dir.replace(/[/\\]+$/, '')}/${filename}` : filename;
     const downloadId = await chrome.downloads.download({
       url,
-      filename,
+      filename: fullName,
       saveAs: true
     });
 

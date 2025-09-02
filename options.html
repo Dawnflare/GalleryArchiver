@@ -39,6 +39,13 @@
       <label><input type="radio" name="timestampFormat" value="YYYY-MM-DD_HHMMSS"> YYYY-MM-DD_HHMMSS</label>
       <label><input type="radio" name="timestampFormat" value="YYYY-MM-DD"> YYYY-MM-DD</label>
     </div>
+    <div>
+      <p>Default save location:</p>
+      <label><input type="radio" name="saveLocation" value="last" checked> Last used download folder</label>
+      <label><input type="radio" name="saveLocation" value="default"> Browser default download folder</label>
+      <label><input type="radio" name="saveLocation" value="custom"> Custom: <input id="customSavePath" type="text"><button id="browseSavePath">Browse</button></label>
+      <input type="file" id="customSavePathPicker" webkitdirectory directory style="display:none">
+    </div>
     <button id="save">Save</button>
     <div id="status"></div>
     <script src="options.js"></script>

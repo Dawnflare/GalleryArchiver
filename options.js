@@ -4,7 +4,9 @@ function restoreOptions() {
     stabilityTimeout: 400,
     filenameBase: 'title',
     customFilename: '',
-    timestampFormat: 'YYYYMMDD_HHMMSS'
+    timestampFormat: 'YYYYMMDD_HHMMSS',
+    saveLocation: 'last',
+    customSavePath: ''
   }, opts => {
     document.getElementById('scrollDelay').value = opts.scrollDelay;
     document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
@@ -14,6 +16,16 @@ function restoreOptions() {
     document.getElementById('customFilename').disabled = opts.filenameBase !== 'custom';
     const tsRadio = document.querySelector(`input[name="timestampFormat"][value="${opts.timestampFormat}"]`);
     if (tsRadio) tsRadio.checked = true;
+    const saveRadio = document.querySelector(`input[name="saveLocation"][value="${opts.saveLocation}"]`);
+    if (saveRadio) saveRadio.checked = true;
+    const customPathInput = document.getElementById('customSavePath');
+    const browseBtn = document.getElementById('browseSavePath');
+    if (customPathInput) {
+      customPathInput.value = opts.customSavePath || '';
+      const isCustom = opts.saveLocation !== 'custom';
+      customPathInput.disabled = isCustom;
+      if (browseBtn) browseBtn.disabled = isCustom;
+    }
   });
 
   chrome.commands.getAll(commands => {
@@ -35,6 +47,8 @@ function saveOptions() {
   const filenameBase = document.querySelector('input[name="filenameBase"]:checked')?.value || 'title';
   const customFilename = document.getElementById('customFilename').value || '';
   const timestampFormat = document.querySelector('input[name="timestampFormat"]:checked')?.value || 'YYYYMMDD_HHMMSS';
+  const saveLocation = document.querySelector('input[name="saveLocation"]:checked')?.value || 'last';
+  const customSavePath = document.getElementById('customSavePath')?.value || '';
 
   const updateShortcut = (name, shortcut) => {
     if (chrome.commands && typeof chrome.commands.update === 'function') {
@@ -51,7 +65,7 @@ function saveOptions() {
   updateShortcut('startAndSave', startSaveShortcut);
   updateShortcut('reset', resetShortcut);
 
-  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat }, () => {
+  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat, saveLocation, customSavePath }, () => {
     const status = document.getElementById('status');
     status.textContent = 'Options saved.';
     setTimeout(() => status.textContent = '', 1500);
@@ -67,4 +81,29 @@ document.querySelectorAll('input[name="filenameBase"]').forEach(r => {
     const customInput = document.getElementById('customFilename');
     customInput.disabled = document.querySelector('input[name="filenameBase"]:checked').value !== 'custom';
   });
+});
+
+document.querySelectorAll('input[name="saveLocation"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const customInput = document.getElementById('customSavePath');
+    const browseBtn = document.getElementById('browseSavePath');
+    const isCustom = document.querySelector('input[name="saveLocation"]:checked').value !== 'custom';
+    customInput.disabled = isCustom;
+    browseBtn.disabled = isCustom;
+  });
+});
+
+document.getElementById('browseSavePath')?.addEventListener('click', () => {
+  const picker = document.getElementById('customSavePathPicker');
+  picker?.click();
+});
+
+document.getElementById('customSavePathPicker')?.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) {
+    const path = file.path || file.webkitRelativePath || '';
+    const dir = path.replace(/[/\\][^/\\]*$/, '');
+    const input = document.getElementById('customSavePath');
+    if (input) input.value = dir;
+  }
 });
