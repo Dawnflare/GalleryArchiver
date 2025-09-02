@@ -549,16 +549,25 @@
     return document.getElementById('gallery') || document;
   }
 
-  function svgPlayBadgeDataURL(diamPx) {
-    const d = Math.max(16, Math.floor(diamPx));
-    const r = Math.floor(d/2);
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${d}" height="${d}" viewBox="0 0 ${d} ${d}">
-        <circle cx="${r}" cy="${r}" r="${r}" fill="rgba(0,0,0,0.55)"/>
-        <polygon points="${Math.floor(r*0.55)},${Math.floor(r*0.35)} ${Math.floor(r*0.55)},${Math.floor(r*1.65)} ${Math.floor(r*1.55)},${r}" fill="#fff"/>
-      </svg>`;
-    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-  }
+// Bright yellow play glyph (with subtle dark stroke for contrast)
+function svgPlayBadgeDataURL(diamPx, color = '#FFD400', stroke = 'rgba(0,0,0,.75)') {
+  const d = Math.max(16, Math.floor(diamPx));
+  const r = Math.floor(d / 2);
+  const triLeftX = Math.floor(r * 0.55);
+  const triTopY  = Math.floor(r * 0.35);
+  const triBotY  = Math.floor(r * 1.65);
+  const triTipX  = Math.floor(r * 1.55);
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${d}" height="${d}" viewBox="0 0 ${d} ${d}">
+      <!-- darker translucent puck to ensure visibility on busy images -->
+      <circle cx="${r}" cy="${r}" r="${r}" fill="rgba(0,0,0,0.55)"/>
+      <!-- bright triangle with a thin stroke so it stands out on light areas -->
+      <polygon points="${triLeftX},${triTopY} ${triLeftX},${triBotY} ${triTipX},${r}"
+               fill="${color}" stroke="${stroke}" stroke-width="${Math.max(1, Math.round(d * 0.04))}"/>
+    </svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
 
   function ensureRelative(container) {
     const style = (container && container.style) ? container.style : null;
