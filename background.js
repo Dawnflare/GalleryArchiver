@@ -65,7 +65,8 @@ async function saveMHTML(tabId) {
       customFilename: '',
       timestampFormat: 'YYYYMMDD_HHMMSS',
       saveLocation: 'last',
-      customSavePath: ''
+      customSavePath: '',
+      lastDownloadDir: ''
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -91,7 +92,11 @@ async function saveMHTML(tabId) {
       const dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
       filename = joinPath(dir, baseFilename);
     } else if (opts.saveLocation === 'last') {
-      saveAs = true;
+      if (opts.lastDownloadDir) {
+        filename = joinPath(opts.lastDownloadDir, baseFilename);
+      } else {
+        saveAs = true;
+      }
     }
 
     const downloadId = await chrome.downloads.download({
@@ -100,9 +105,20 @@ async function saveMHTML(tabId) {
       saveAs
     });
 
-    const onChanged = delta => {
+    const onChanged = async delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
+        try {
+          const [item] = await chrome.downloads.search({ id: downloadId });
+          const dir = item?.filename
+            ?.replace(/[\\/][^\\/]*$/, '')
+            .replace(/^([a-zA-Z]:)?[\\/]+/, '');
+          if (dir) {
+            chrome.storage.local.set({ lastDownloadDir: dir });
+          }
+        } catch (err) {
+          console.warn('failed to capture last dir', err);
+        }
         chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
       }
     };

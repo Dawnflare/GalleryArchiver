@@ -117,7 +117,8 @@ document.getElementById('save').addEventListener('click', async () => {
       customFilename: '',
       timestampFormat: 'YYYYMMDD_HHMMSS',
       saveLocation: 'last',
-      customSavePath: ''
+      customSavePath: '',
+      lastDownloadDir: ''
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -143,7 +144,11 @@ document.getElementById('save').addEventListener('click', async () => {
         const dir = opts.customSavePath.replace(/^([a-zA-Z]:)?[\\/]+/, '');
         filename = joinPath(dir, baseFilename);
       } else if (opts.saveLocation === 'last') {
-        saveAs = true;
+        if (opts.lastDownloadDir) {
+          filename = joinPath(opts.lastDownloadDir, baseFilename);
+        } else {
+          saveAs = true;
+        }
       }
       const downloadId = await chrome.downloads.download({
         url,
@@ -152,9 +157,20 @@ document.getElementById('save').addEventListener('click', async () => {
       });
 
     // After download completes, stop (same as your branch)
-    const onChanged = delta => {
+    const onChanged = async delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
+        try {
+          const [item] = await chrome.downloads.search({ id: downloadId });
+          const dir = item?.filename
+            ?.replace(/[\\/][^\\/]*$/, '')
+            .replace(/^([a-zA-Z]:)?[\\/]+/, '');
+          if (dir) {
+            chrome.storage.local.set({ lastDownloadDir: dir });
+          }
+        } catch (err) {
+          console.warn('failed to capture last dir', err);
+        }
         sendToContent('ARCHIVER_STOP');
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       }
