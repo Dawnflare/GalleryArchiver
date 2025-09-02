@@ -39,6 +39,12 @@
         "default": "Alt+2"
       },
       "description": "Save archive"
+    },
+    "startAndSave": {
+      "suggested_key": {
+        "default": "Alt+3"
+      },
+      "description": "Start and save archive"
     }
   },
   "content_scripts": [

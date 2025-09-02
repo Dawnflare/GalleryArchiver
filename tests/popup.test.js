@@ -2,6 +2,7 @@ document.body.innerHTML = `
   <button id="start"></button><span id="startShortcutLabel"></span>
   <button id="stop"></button>
   <button id="reset"></button><span id="resetShortcutLabel"></span>
+  <button id="startSave"></button><span id="startSaveShortcutLabel"></span>
   <button id="save"></button><span id="saveShortcutLabel"></span>
   <input id="maxItems" />
   <span id="seen"></span>
@@ -24,11 +25,12 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
     { name: 'start', shortcut: 'Alt+1' },
     { name: 'reset', shortcut: 'Alt+Shift+R' },
-    { name: 'save', shortcut: 'Alt+2' }
+    { name: 'save', shortcut: 'Alt+2' },
+    { name: 'startAndSave', shortcut: 'Alt+3' }
   ])) }
 };
 
@@ -70,5 +72,12 @@ test('displays shortcut labels from commands API', async () => {
   await Promise.resolve();
   expect(document.getElementById('startShortcutLabel').textContent).toBe('(Alt+1)');
   expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+Shift+R)');
+  expect(document.getElementById('startSaveShortcutLabel').textContent).toBe('(Alt+3)');
   expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
+});
+
+test('startSave button sends start-and-save message', () => {
+  chrome.runtime.sendMessage.mockClear();
+  document.getElementById('startSave').click();
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_START_AND_SAVE' });
 });

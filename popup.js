@@ -18,6 +18,7 @@ function restoreOptions() {
     const find = name => commands.find(c => c.name === name)?.shortcut || '';
     document.getElementById('startShortcutLabel').textContent = `(${find('start') || 'Alt+1'})`;
     document.getElementById('resetShortcutLabel').textContent = `(${find('reset') || 'Alt+Shift+R'})`;
+    document.getElementById('startSaveShortcutLabel').textContent = `(${find('startAndSave') || 'Alt+3'})`;
     document.getElementById('saveShortcutLabel').textContent = `(${find('save') || 'Alt+2'})`;
   });
 }
@@ -43,6 +44,11 @@ document.getElementById('reset').addEventListener('click', async () => {
   await chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_RESET', payload: {} });
   await chrome.tabs.reload(tab.id);
   chrome.runtime.reload();
+});
+
+document.getElementById('startSave').addEventListener('click', () => {
+  saveOptions();
+  chrome.runtime.sendMessage({ type: 'ARCHIVER_START_AND_SAVE' });
 });
 
 document.getElementById('save').addEventListener('click', async () => {
