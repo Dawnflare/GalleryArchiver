@@ -18,12 +18,21 @@ global.chrome = {
 
 require('../background.js');
 
-test('save command opens popup then saves', async () => {
+test('start command opens popup then starts capture', async () => {
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  await handler('start');
+
+  expect(chrome.action.openPopup).toHaveBeenCalled();
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(321, { type: 'ARCHIVER_START' });
+});
+
+test('save command triggers download without opening popup', async () => {
+  chrome.action.openPopup.mockClear();
+  chrome.pageCapture.saveAsMHTML.mockClear();
   const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
   await handler('save');
 
-  expect(chrome.action.openPopup).toHaveBeenCalled();
+  expect(chrome.action.openPopup).not.toHaveBeenCalled();
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-  expect(chrome.tabs.query.mock.invocationCallOrder[0]).toBeLessThan(chrome.action.openPopup.mock.invocationCallOrder[0]);
 });
 
