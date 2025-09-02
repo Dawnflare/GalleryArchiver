@@ -51,6 +51,10 @@ document.getElementById('startSave').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'ARCHIVER_START_AND_SAVE' });
 });
 
+document.getElementById('options').addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+});
+
 document.getElementById('save').addEventListener('click', async () => {
   const tab = await getActiveTab();
 
