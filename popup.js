@@ -116,9 +116,7 @@ document.getElementById('save').addEventListener('click', async () => {
       filenameBase: 'title',
       customFilename: '',
       timestampFormat: 'YYYYMMDD_HHMMSS',
-      saveLocation: 'last',
-      customSavePath: '',
-      lastDownloadDir: ''
+      saveLocation: 'last'
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -139,30 +137,39 @@ document.getElementById('save').addEventListener('click', async () => {
       const ts = formatTimestamp(opts.timestampFormat);
       const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-      let filename = baseFilename;
-      if (opts.saveLocation === 'custom' && opts.customSavePath) {
-        filename = joinPath(opts.customSavePath, baseFilename);
-      } else if (opts.saveLocation === 'last' && opts.lastDownloadDir) {
-        filename = joinPath(opts.lastDownloadDir, baseFilename);
+      let downloadId;
+      if (opts.saveLocation === 'last') {
+        let lastDir = '';
+        try {
+          const [last] = await chrome.downloads.search({ limit: 1, orderBy: ['-startTime'] });
+          lastDir = last?.filename?.replace(/[\\/][^\\/]*$/, '') || '';
+        } catch {}
+
+        const handler = (item, suggest) => {
+          if (item.id === downloadId) {
+            const full = lastDir ? joinPath(lastDir, baseFilename) : baseFilename;
+            try { suggest({ filename: full }); } catch { suggest({ filename: baseFilename }); }
+            chrome.downloads.onDeterminingFilename.removeListener(handler);
+          }
+        };
+        chrome.downloads.onDeterminingFilename.addListener(handler);
+
+        downloadId = await chrome.downloads.download({
+          url,
+          saveAs: true
+        });
+      } else {
+        downloadId = await chrome.downloads.download({
+          url,
+          filename: baseFilename,
+          saveAs: false
+        });
       }
 
-      const downloadId = await chrome.downloads.download({
-        url,
-        filename,
-        saveAs: true
-      });
-
     // After download completes, stop (same as your branch)
-    const onChanged = async delta => {
+    const onChanged = delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
-        try {
-          const [item] = await chrome.downloads.search({ id: downloadId });
-          const dir = item?.filename?.replace(/[\\/][^\\/]*$/, '');
-          if (dir) chrome.storage.local.set({ lastDownloadDir: dir });
-        } catch (err) {
-          console.warn('failed to capture last dir', err);
-        }
         sendToContent('ARCHIVER_STOP');
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       }

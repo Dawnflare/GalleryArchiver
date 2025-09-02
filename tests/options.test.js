@@ -9,13 +9,12 @@ document.body.innerHTML = `
   <input type="radio" name="filenameBase" value="custom" checked />
   <input id="customFilename" value="my page" />
   <input type="radio" name="timestampFormat" value="YYYYMMDD" checked />
-  <input id="customSavePath" />
   <button id="save"></button>
   <div id="status"></div>
 `;
 
 global.chrome = {
-  storage: { local: { get: jest.fn((defs, cb) => cb({ ...defs, saveLocation: 'custom' })), set: jest.fn() } },
+  storage: { local: { get: jest.fn((defs, cb) => cb(defs)), set: jest.fn() } },
   commands: { getAll: jest.fn(cb => cb([])) },
   downloads: {}
 };
@@ -37,8 +36,7 @@ test('saves options without commands.update', () => {
     filenameBase: 'custom',
     customFilename: 'my page',
     timestampFormat: 'YYYYMMDD',
-    saveLocation: 'last',
-    customSavePath: ''
+    saveLocation: 'last'
   }, expect.any(Function));
 });
 

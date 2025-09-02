@@ -46,63 +46,41 @@ test('reset command opens popup then reloads tab and extension', async () => {
   expect(chrome.runtime.reload).toHaveBeenCalled();
 });
 
-test('save command opens popup then triggers download', async () => {
+test('save command uses last download directory via onDeterminingFilename', async () => {
   chrome.action.openPopup.mockClear();
   chrome.pageCapture.saveAsMHTML.mockClear();
   chrome.downloads.search.mockClear();
+  chrome.downloads.onDeterminingFilename.addListener.mockClear();
+
   const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
   await handler('save');
 
   expect(chrome.action.openPopup).toHaveBeenCalled();
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-  expect(chrome.downloads.search).not.toHaveBeenCalled();
+  expect(chrome.downloads.search).toHaveBeenCalledWith({ limit: 1, orderBy: ['-startTime'] });
+  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest = jest.fn();
+  listener({ id: 1 }, suggest);
+  expect(suggest.mock.calls[0][0].filename).toMatch(/^\/prev\/path\/My_Tab_.*\.mhtml$/);
   const opts = chrome.downloads.download.mock.calls[0][0];
-  expect(opts.url.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
-  expect(opts.filename).toMatch(/^My_Tab_.*\.mhtml$/);
   expect(opts.saveAs).toBe(true);
 });
 
-test('stores last download directory but continues prompting', async () => {
+test('uses browser default folder when configured', async () => {
+  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
+    ...defaults,
+    saveLocation: 'default'
+  }));
   chrome.downloads.download.mockClear();
-  chrome.downloads.onChanged.addListener.mockClear();
-  chrome.storage.local.set.mockClear();
   chrome.downloads.search.mockClear();
   chrome.downloads.onDeterminingFilename.addListener.mockClear();
 
   const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
-
-  // First save with no stored directory triggers save dialog
   await handler('save');
-  const listener = chrome.downloads.onChanged.addListener.mock.calls[0][0];
-  await listener({ id: 1, state: { current: 'complete' } });
-
-  expect(chrome.downloads.search).toHaveBeenCalledWith({ id: 1 });
-  expect(chrome.storage.local.set).toHaveBeenCalledWith({ lastDownloadDir: '/prev/path' });
-
-  // Simulate stored directory for next save
-  chrome.storage.local.get.mockImplementation((defaults, cb) => cb({
-    ...defaults,
-    lastDownloadDir: '/prev/path'
-  }));
-  chrome.downloads.download.mockClear();
-
-  await handler('save');
+  expect(chrome.downloads.search).not.toHaveBeenCalled();
+  expect(chrome.downloads.onDeterminingFilename.addListener).not.toHaveBeenCalled();
   const opts2 = chrome.downloads.download.mock.calls[0][0];
-  expect(opts2.filename).toMatch(/^\/prev\/path\/My_Tab_.*\.mhtml$/);
-  expect(opts2.saveAs).toBe(true);
-});
-
-test('uses custom save path when configured', async () => {
-  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
-    ...defaults,
-    saveLocation: 'custom',
-    customSavePath: '/my/custom/dir'
-  }));
-  chrome.downloads.download.mockClear();
-  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
-  await handler('save');
-  const opts3 = chrome.downloads.download.mock.calls[0][0];
-  expect(opts3.filename).toMatch(/^\/my\/custom\/dir\/My_Tab_.*\.mhtml$/);
-  expect(opts3.saveAs).toBe(true);
+  expect(opts2.filename).toMatch(/^My_Tab_.*\.mhtml$/);
+  expect(opts2.saveAs).toBe(false);
 });
 

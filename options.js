@@ -5,8 +5,7 @@ function restoreOptions() {
     filenameBase: 'title',
     customFilename: '',
     timestampFormat: 'YYYYMMDD_HHMMSS',
-    saveLocation: 'last',
-    customSavePath: ''
+    saveLocation: 'last'
   }, opts => {
     document.getElementById('scrollDelay').value = opts.scrollDelay;
     document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
@@ -18,11 +17,6 @@ function restoreOptions() {
     if (tsRadio) tsRadio.checked = true;
     const saveRadio = document.querySelector(`input[name="saveLocation"][value="${opts.saveLocation}"]`);
     if (saveRadio) saveRadio.checked = true;
-    const customPathInput = document.getElementById('customSavePath');
-    if (customPathInput) {
-      customPathInput.value = opts.customSavePath || '';
-      customPathInput.disabled = opts.saveLocation !== 'custom';
-    }
   });
 
   chrome.commands.getAll(commands => {
@@ -45,7 +39,6 @@ function saveOptions() {
   const customFilename = document.getElementById('customFilename').value || '';
   const timestampFormat = document.querySelector('input[name="timestampFormat"]:checked')?.value || 'YYYYMMDD_HHMMSS';
   const saveLocation = document.querySelector('input[name="saveLocation"]:checked')?.value || 'last';
-  const customSavePath = document.getElementById('customSavePath')?.value || '';
 
   const updateShortcut = (name, shortcut) => {
     if (chrome.commands && typeof chrome.commands.update === 'function') {
@@ -62,7 +55,7 @@ function saveOptions() {
   updateShortcut('startAndSave', startSaveShortcut);
   updateShortcut('reset', resetShortcut);
 
-  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat, saveLocation, customSavePath }, () => {
+  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat, saveLocation }, () => {
     const status = document.getElementById('status');
     status.textContent = 'Options saved.';
     setTimeout(() => status.textContent = '', 1500);
@@ -80,10 +73,3 @@ document.querySelectorAll('input[name="filenameBase"]').forEach(r => {
   });
 });
 
-document.querySelectorAll('input[name="saveLocation"]').forEach(r => {
-  r.addEventListener('change', () => {
-    const customInput = document.getElementById('customSavePath');
-    const isCustom = document.querySelector('input[name="saveLocation"]:checked').value !== 'custom';
-    customInput.disabled = isCustom;
-  });
-});
