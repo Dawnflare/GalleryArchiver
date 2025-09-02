@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Gallery Archiver by Dawnflare",
-  "version": "0.1.0",
-  "description": "Capture infinite-scroll galleries into a single MHTML with clickable links per image. Core build: MHTML-only, no enrichment.",
+  "version": "1.0",
+  "description": "Capture infinite-scroll galleries into a single MHTML with clickable links per image.",
   "permissions": [
     "activeTab",
     "scripting",
