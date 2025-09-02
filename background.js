@@ -32,6 +32,12 @@ function formatTimestamp(fmt) {
   }
 }
 
+function joinPath(dir, name) {
+  if (!dir) return name;
+  const sep = dir.includes('\\') ? '\\' : '/';
+  return dir.replace(/[\\\/]+$/, '') + sep + name;
+}
+
 async function saveMHTML(tabId) {
   if (!tabId) return;
   try {
@@ -57,7 +63,8 @@ async function saveMHTML(tabId) {
     const opts = await new Promise(r => chrome.storage.local.get({
       filenameBase: 'title',
       customFilename: '',
-      timestampFormat: 'YYYYMMDD_HHMMSS'
+      timestampFormat: 'YYYYMMDD_HHMMSS',
+      saveLocation: 'last'
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -76,13 +83,36 @@ async function saveMHTML(tabId) {
         break;
     }
     const ts = formatTimestamp(opts.timestampFormat);
-    const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+    const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-    const downloadId = await chrome.downloads.download({
-      url: dataUrl,
-      filename,
-      saveAs: true
-    });
+    let downloadId;
+    if (opts.saveLocation === 'last') {
+      let lastDir = '';
+      try {
+        const [last] = await chrome.downloads.search({ limit: 1, orderBy: ['-startTime'] });
+        lastDir = last?.filename?.replace(/[\\/][^\\/]*$/, '') || '';
+      } catch {}
+
+      const handler = (item, suggest) => {
+        if (item.id === downloadId) {
+          const full = lastDir ? joinPath(lastDir, baseFilename) : baseFilename;
+          try { suggest({ filename: full }); } catch { suggest({ filename: baseFilename }); }
+          chrome.downloads.onDeterminingFilename.removeListener(handler);
+        }
+      };
+      chrome.downloads.onDeterminingFilename.addListener(handler);
+
+      downloadId = await chrome.downloads.download({
+        url: dataUrl,
+        saveAs: true
+      });
+    } else {
+      downloadId = await chrome.downloads.download({
+        url: dataUrl,
+        filename: baseFilename,
+        saveAs: false
+      });
+    }
 
     const onChanged = delta => {
       if (delta.id === downloadId && delta.state?.current === 'complete') {

@@ -24,7 +24,12 @@ global.chrome = {
     reload: jest.fn()
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)) },
+  downloads: {
+    download: jest.fn(() => Promise.resolve(1)),
+    search: jest.fn(() => Promise.resolve([{ filename: '/another/path/old.mhtml' }])),
+    onChanged: { addListener: jest.fn(), removeListener: jest.fn() },
+    onDeterminingFilename: { addListener: jest.fn(), removeListener: jest.fn() }
+  },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
@@ -37,21 +42,43 @@ global.chrome = {
 
 require('../popup.js');
 
-test('save button triggers page capture and download', async () => {
+test('save button suggests last download directory', async () => {
   document.getElementById('save').click();
-  // Wait microtasks for async handlers
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
-  // ensure we wrap the captured data with the correct MIME type
+  expect(chrome.downloads.search).toHaveBeenCalledWith({ limit: 1, orderBy: ['-startTime'] });
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
-  expect(chrome.downloads.download).toHaveBeenCalled();
-  const fname = chrome.downloads.download.mock.calls[0][0].filename;
-  expect(fname.startsWith('My_Tab_')).toBe(true);
-  expect(fname.endsWith('.mhtml')).toBe(true);
+  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest = jest.fn();
+  listener({ id: 1 }, suggest);
+  expect(suggest.mock.calls[0][0].filename).toMatch(/^\/another\/path\/My_Tab_.*\.mhtml$/);
+  const opts = chrome.downloads.download.mock.calls[0][0];
+  expect(opts.saveAs).toBe(true);
+});
+
+test('save uses browser default folder when configured', async () => {
+  chrome.storage.local.get.mockImplementation((defaults, cb) => cb({
+    ...defaults,
+    saveLocation: 'default'
+  }));
+  chrome.downloads.download.mockClear();
+  chrome.downloads.search.mockClear();
+  chrome.downloads.onDeterminingFilename.addListener.mockClear();
+  document.getElementById('save').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
+  expect(chrome.downloads.search).not.toHaveBeenCalled();
+  expect(chrome.downloads.onDeterminingFilename.addListener).not.toHaveBeenCalled();
+  const opts2 = chrome.downloads.download.mock.calls[0][0];
+  expect(opts2.filename).toMatch(/^My_Tab_.*\.mhtml$/);
+  expect(opts2.saveAs).toBe(false);
+  chrome.storage.local.get.mockImplementation((defaults, cb) => cb(defaults));
 });
 
 test('reset button stops autoscroll, reloads the page and extension', async () => {

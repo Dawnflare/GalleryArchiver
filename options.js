@@ -4,7 +4,8 @@ function restoreOptions() {
     stabilityTimeout: 400,
     filenameBase: 'title',
     customFilename: '',
-    timestampFormat: 'YYYYMMDD_HHMMSS'
+    timestampFormat: 'YYYYMMDD_HHMMSS',
+    saveLocation: 'last'
   }, opts => {
     document.getElementById('scrollDelay').value = opts.scrollDelay;
     document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
@@ -14,6 +15,8 @@ function restoreOptions() {
     document.getElementById('customFilename').disabled = opts.filenameBase !== 'custom';
     const tsRadio = document.querySelector(`input[name="timestampFormat"][value="${opts.timestampFormat}"]`);
     if (tsRadio) tsRadio.checked = true;
+    const saveRadio = document.querySelector(`input[name="saveLocation"][value="${opts.saveLocation}"]`);
+    if (saveRadio) saveRadio.checked = true;
   });
 
   chrome.commands.getAll(commands => {
@@ -35,6 +38,7 @@ function saveOptions() {
   const filenameBase = document.querySelector('input[name="filenameBase"]:checked')?.value || 'title';
   const customFilename = document.getElementById('customFilename').value || '';
   const timestampFormat = document.querySelector('input[name="timestampFormat"]:checked')?.value || 'YYYYMMDD_HHMMSS';
+  const saveLocation = document.querySelector('input[name="saveLocation"]:checked')?.value || 'last';
 
   const updateShortcut = (name, shortcut) => {
     if (chrome.commands && typeof chrome.commands.update === 'function') {
@@ -51,7 +55,7 @@ function saveOptions() {
   updateShortcut('startAndSave', startSaveShortcut);
   updateShortcut('reset', resetShortcut);
 
-  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat }, () => {
+  chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat, saveLocation }, () => {
     const status = document.getElementById('status');
     status.textContent = 'Options saved.';
     setTimeout(() => status.textContent = '', 1500);
@@ -68,3 +72,4 @@ document.querySelectorAll('input[name="filenameBase"]').forEach(r => {
     customInput.disabled = document.querySelector('input[name="filenameBase"]:checked').value !== 'custom';
   });
 });
+

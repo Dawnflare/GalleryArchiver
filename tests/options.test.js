@@ -15,7 +15,8 @@ document.body.innerHTML = `
 
 global.chrome = {
   storage: { local: { get: jest.fn((defs, cb) => cb(defs)), set: jest.fn() } },
-  commands: { getAll: jest.fn(cb => cb([])) }
+  commands: { getAll: jest.fn(cb => cb([])) },
+  downloads: {}
 };
 
 require('../options.js');
@@ -34,6 +35,8 @@ test('saves options without commands.update', () => {
     stabilityTimeout: 400,
     filenameBase: 'custom',
     customFilename: 'my page',
-    timestampFormat: 'YYYYMMDD'
+    timestampFormat: 'YYYYMMDD',
+    saveLocation: 'last'
   }, expect.any(Function));
 });
+

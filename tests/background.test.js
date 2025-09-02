@@ -11,10 +11,15 @@ global.chrome = {
     reload: jest.fn(),
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(Uint8Array.from([116,101,115,116]).buffer) })) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
+  downloads: {
+    download: jest.fn(() => Promise.resolve(1)),
+    search: jest.fn(() => Promise.resolve([{ filename: '/prev/path/old.mhtml' }])),
+    onChanged: { addListener: jest.fn(), removeListener: jest.fn() },
+    onDeterminingFilename: { addListener: jest.fn(), removeListener: jest.fn() }
+  },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
   commands: { onCommand: { addListener: jest.fn() } },
-  storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)) } }
+  storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } }
 };
 
 require('../background.js');
@@ -41,18 +46,41 @@ test('reset command opens popup then reloads tab and extension', async () => {
   expect(chrome.runtime.reload).toHaveBeenCalled();
 });
 
-test('save command opens popup then triggers download', async () => {
+test('save command uses last download directory via onDeterminingFilename', async () => {
   chrome.action.openPopup.mockClear();
   chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.downloads.search.mockClear();
+  chrome.downloads.onDeterminingFilename.addListener.mockClear();
+
   const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
   await handler('save');
 
   expect(chrome.action.openPopup).toHaveBeenCalled();
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-  const urlArg = chrome.downloads.download.mock.calls[0][0].url;
-  expect(urlArg.startsWith('data:application/x-mimearchive;base64,')).toBe(true);
-  const fname = chrome.downloads.download.mock.calls[0][0].filename;
-  expect(fname.startsWith('My_Tab_')).toBe(true);
-  expect(fname.endsWith('.mhtml')).toBe(true);
+  expect(chrome.downloads.search).toHaveBeenCalledWith({ limit: 1, orderBy: ['-startTime'] });
+  const listener = chrome.downloads.onDeterminingFilename.addListener.mock.calls[0][0];
+  const suggest = jest.fn();
+  listener({ id: 1 }, suggest);
+  expect(suggest.mock.calls[0][0].filename).toMatch(/^\/prev\/path\/My_Tab_.*\.mhtml$/);
+  const opts = chrome.downloads.download.mock.calls[0][0];
+  expect(opts.saveAs).toBe(true);
+});
+
+test('uses browser default folder when configured', async () => {
+  chrome.storage.local.get.mockImplementationOnce((defaults, cb) => cb({
+    ...defaults,
+    saveLocation: 'default'
+  }));
+  chrome.downloads.download.mockClear();
+  chrome.downloads.search.mockClear();
+  chrome.downloads.onDeterminingFilename.addListener.mockClear();
+
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  await handler('save');
+  expect(chrome.downloads.search).not.toHaveBeenCalled();
+  expect(chrome.downloads.onDeterminingFilename.addListener).not.toHaveBeenCalled();
+  const opts2 = chrome.downloads.download.mock.calls[0][0];
+  expect(opts2.filename).toMatch(/^My_Tab_.*\.mhtml$/);
+  expect(opts2.saveAs).toBe(false);
 });
 

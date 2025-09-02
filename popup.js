@@ -35,6 +35,12 @@ function formatTimestamp(fmt) {
   }
 }
 
+function joinPath(dir, name) {
+  if (!dir) return name;
+  const sep = dir.includes('\\') ? '\\' : '/';
+  return dir.replace(/[\\\/]+$/, '') + sep + name;
+}
+
 async function sendToContent(type, payload={}) {
   const tab = await getActiveTab();
   return chrome.tabs.sendMessage(tab.id, { type, payload });
@@ -109,7 +115,8 @@ document.getElementById('save').addEventListener('click', async () => {
     const opts = await new Promise(r => chrome.storage.local.get({
       filenameBase: 'title',
       customFilename: '',
-      timestampFormat: 'YYYYMMDD_HHMMSS'
+      timestampFormat: 'YYYYMMDD_HHMMSS',
+      saveLocation: 'last'
     }, r));
     let baseName = '';
     switch (opts.filenameBase) {
@@ -127,14 +134,37 @@ document.getElementById('save').addEventListener('click', async () => {
         baseName = sanitize(tab.title) || 'archive';
         break;
     }
-    const ts = formatTimestamp(opts.timestampFormat);
-    const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+      const ts = formatTimestamp(opts.timestampFormat);
+      const baseFilename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-    const downloadId = await chrome.downloads.download({
-      url,
-      filename,
-      saveAs: true
-    });
+      let downloadId;
+      if (opts.saveLocation === 'last') {
+        let lastDir = '';
+        try {
+          const [last] = await chrome.downloads.search({ limit: 1, orderBy: ['-startTime'] });
+          lastDir = last?.filename?.replace(/[\\/][^\\/]*$/, '') || '';
+        } catch {}
+
+        const handler = (item, suggest) => {
+          if (item.id === downloadId) {
+            const full = lastDir ? joinPath(lastDir, baseFilename) : baseFilename;
+            try { suggest({ filename: full }); } catch { suggest({ filename: baseFilename }); }
+            chrome.downloads.onDeterminingFilename.removeListener(handler);
+          }
+        };
+        chrome.downloads.onDeterminingFilename.addListener(handler);
+
+        downloadId = await chrome.downloads.download({
+          url,
+          saveAs: true
+        });
+      } else {
+        downloadId = await chrome.downloads.download({
+          url,
+          filename: baseFilename,
+          saveAs: false
+        });
+      }
 
     // After download completes, stop (same as your branch)
     const onChanged = delta => {
