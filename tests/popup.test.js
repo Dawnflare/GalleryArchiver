@@ -24,7 +24,12 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() }
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
+  commands: { getAll: jest.fn(cb => cb([
+    { name: 'start', shortcut: 'Alt+1' },
+    { name: 'reset', shortcut: 'Alt+F5' },
+    { name: 'save', shortcut: 'Alt+2' }
+  ])) }
 };
 
 require('../popup.js');
@@ -61,12 +66,9 @@ test('reset button stops autoscroll, reloads the page and extension', async () =
   expect(chrome.tabs.reload.mock.invocationCallOrder[0]).toBeLessThan(chrome.runtime.reload.mock.invocationCallOrder[0]);
 });
 
-test('save shortcut triggers page capture', async () => {
-  chrome.pageCapture.saveAsMHTML.mockClear();
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', altKey: true }));
+test('displays shortcut labels from commands API', async () => {
   await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await new Promise(r => setTimeout(r, 150));
-  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalled();
+  expect(document.getElementById('startShortcutLabel').textContent).toBe('(Alt+1)');
+  expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+F5)');
+  expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
 });

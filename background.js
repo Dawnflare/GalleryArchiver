@@ -1,81 +1,65 @@
 // background.js (drop-in)
 
+async function saveMHTML(tabId) {
+  if (!tabId) return;
+  try {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_PREPARE_FOR_SAVE' });
+      await new Promise(r => setTimeout(r, 120));
+    } catch (e) {
+      console.warn('[BG] PREPARE failed (continuing anyway):', e);
+    }
+
+    const mhtmlData = await chrome.pageCapture.saveAsMHTML({ tabId });
+    const blob = new Blob([mhtmlData], { type: 'application/x-mimearchive' });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const downloadId = await chrome.downloads.download({
+      url,
+      filename: `civitai-archive-${stamp}.mhtml`,
+      saveAs: true
+    });
+
+    const onChanged = delta => {
+      if (delta.id === downloadId && delta.state?.current === 'complete') {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    };
+
+    if (chrome.downloads.onChanged?.addListener) {
+      chrome.downloads.onChanged.addListener(onChanged);
+    } else {
+      chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+  } catch (e) {
+    console.error('[BG] save flow error:', e);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
 
-  // Save the active tab as MHTML (with a PREPARE step first)
   if (msg.type === 'ARCHIVER_SAVE_MHTML') {
-    (async () => {
-      try {
-        // Determine the tab to save
-        const tabId = msg.tabId || sender?.tab?.id;
-        if (!tabId) {
-          console.warn('[BG] no tabId for save');
-          sendResponse({ ok: false, error: 'no tabId' });
-          return;
-        }
-
-        console.log('[BG] ARCHIVER_SAVE_MHTML received → PREPARE start');
-
-        // Ask content to prepare (overlays, layout tweaks, etc.)
-        const prep = await new Promise((resolve) => {
-          let done = false;
-
-          chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_PREPARE_FOR_SAVE' }, (resp) => {
-            done = true;
-            if (chrome.runtime.lastError) {
-              console.warn('[BG] PREPARE error:', chrome.runtime.lastError.message);
-              resolve({ ok: false, error: chrome.runtime.lastError.message });
-            } else {
-              resolve(resp || { ok: true });
-            }
-          });
-
-          // Failsafe timeout
-          setTimeout(() => { if (!done) resolve({ ok: false, error: 'timeout' }); }, 1500);
-        });
-
-        console.log('[BG] PREPARE result:', prep);
-
-        // Small settle to let the DOM paint before snapshot
-        await new Promise((r) => setTimeout(r, 100));
-
-        // Capture → Blob
-        chrome.pageCapture.saveAsMHTML({ tabId }, async (blob) => {
-          if (!blob) {
-            console.error('[BG] pageCapture returned empty blob');
-            sendResponse({ ok: false, error: 'empty blob' });
-            return;
-          }
-
-          console.log('[BG] converting blob to object URL');
-          const url = URL.createObjectURL(blob);
-
-          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const filename = `civitai-archive-${stamp}.mhtml`;
-
-          try {
-            const id = await chrome.downloads.download({
-              url,
-              filename,
-              saveAs: true
-            });
-            console.log('[BG] download started:', id);
-            // keep URL alive a little while
-            setTimeout(() => URL.revokeObjectURL(url), 30000);
-            sendResponse({ ok: true, downloadId: id });
-          } catch (e) {
-            console.error('[BG] download error:', e);
-            sendResponse({ ok: false, error: String(e) });
-          }
-        });
-      } catch (e) {
-        console.error('[BG] save flow error:', e);
-        sendResponse({ ok: false, error: String(e) });
-      }
-    })();
-
-    // async response
+    saveMHTML(msg.tabId || sender?.tab?.id)
+      .then(() => sendResponse({ ok: true }))
+      .catch(e => sendResponse({ ok: false, error: String(e) }));
     return true;
+  }
+});
+
+chrome.commands.onCommand.addListener(async (command) => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+  if (command === 'start') {
+    chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_START' });
+  } else if (command === 'reset') {
+    await chrome.tabs.sendMessage(tab.id, { type: 'ARCHIVER_RESET', payload: {} });
+    await chrome.tabs.reload(tab.id);
+    chrome.runtime.reload();
+  } else if (command === 'save') {
+    await saveMHTML(tab.id);
   }
 });

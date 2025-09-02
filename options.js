@@ -1,16 +1,17 @@
 function restoreOptions() {
   chrome.storage.local.get({
-    startShortcut: 'Alt+1',
-    resetShortcut: 'Alt+F5',
-    saveShortcut: 'Alt+2',
     scrollDelay: 300,
     stabilityTimeout: 400
   }, opts => {
-    document.getElementById('startShortcut').value = opts.startShortcut;
-    document.getElementById('resetShortcut').value = opts.resetShortcut;
-    document.getElementById('saveShortcut').value = opts.saveShortcut;
     document.getElementById('scrollDelay').value = opts.scrollDelay;
     document.getElementById('stabilityTimeout').value = opts.stabilityTimeout;
+  });
+
+  chrome.commands.getAll(commands => {
+    const find = name => commands.find(c => c.name === name)?.shortcut || '';
+    document.getElementById('startShortcut').value = find('start') || 'Alt+1';
+    document.getElementById('resetShortcut').value = find('reset') || 'Alt+F5';
+    document.getElementById('saveShortcut').value = find('save') || 'Alt+2';
   });
 }
 
@@ -20,7 +21,12 @@ function saveOptions() {
   const saveShortcut = document.getElementById('saveShortcut').value || 'Alt+2';
   const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
   const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
-  chrome.storage.local.set({ startShortcut, resetShortcut, saveShortcut, scrollDelay, stabilityTimeout }, () => {
+
+  chrome.commands.update({ name: 'start', shortcut: startShortcut });
+  chrome.commands.update({ name: 'reset', shortcut: resetShortcut });
+  chrome.commands.update({ name: 'save', shortcut: saveShortcut });
+
+  chrome.storage.local.set({ scrollDelay, stabilityTimeout }, () => {
     const status = document.getElementById('status');
     status.textContent = 'Options saved.';
     setTimeout(() => status.textContent = '', 1500);

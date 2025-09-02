@@ -33,6 +33,7 @@ Civitai’s React/virtualized galleries create and remove DOM nodes as you scrol
 - **Buttons:** Start, Stop, Save as MHTML.
 - **Status:** Seen / Captured / Deduped counters; basic progress indicator.
 - **Options (v1):** Max items (default 200).
+- **Global Shortcuts:** Start (Alt+1), Save (Alt+2), Reset (Alt+F5); configurable via options page and Brave's extension shortcuts menu.
 
 ## 7) Technical Approach (Overview)
 1. **Hoarding to bypass virtualization:** Create an **Archive Bucket** (`#civitai-archiver-bucket`) appended to `document.body`, outside the app’s React root. As cards appear, clone static entries into the bucket; each clone contains a clickable `<a href="…/images/…"><img/></a>`.
