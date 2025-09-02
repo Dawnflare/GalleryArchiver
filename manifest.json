@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gallery Archiver by Dawnflare",
   "version": "1.0",
-  "description": "Capture infinite-scroll galleries into a single MHTML with autoscroll and image persistence.",
+  "description": "Capture infinite-scroll galleries into a single MHTML.  Features autoscroll and image persistence to compensate for dynamic image offloading by the gallery.",
   "permissions": [
     "activeTab",
     "scripting",
