@@ -4,6 +4,7 @@ document.body.innerHTML = `
   <span id="startSaveShortcutLabel"></span><button id="startSave"></button>
   <span id="resetShortcutLabel"></span><button id="reset"></button>
   <button id="stop"></button>
+  <button id="options"></button>
   <input id="maxItems" />
   <span id="seen"></span>
   <span id="captured"></span>
@@ -25,7 +26,7 @@ global.chrome = {
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
   downloads: { download: jest.fn(() => Promise.resolve(1)) },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn() },
+  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
     { name: 'start', shortcut: 'Alt+1' },
     { name: 'reset', shortcut: 'Alt+Shift+R' },
@@ -80,4 +81,10 @@ test('startSave button sends start-and-save message', () => {
   chrome.runtime.sendMessage.mockClear();
   document.getElementById('startSave').click();
   expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_START_AND_SAVE' });
+});
+
+test('options button opens the options page', () => {
+  chrome.runtime.openOptionsPage.mockClear();
+  document.getElementById('options').click();
+  expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
 });
