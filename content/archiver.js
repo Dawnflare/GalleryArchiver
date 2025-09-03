@@ -328,6 +328,38 @@
     }
   });
 
+// Save MHTML by clicking a hidden <a download> IN THE PAGE (preserves last-used folder)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE') {
+    try {
+      const { bytes, mime, suggestedName } = msg.payload || {};
+      // Rebuild Blob in the page context
+      const buf = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : new Uint8Array(0);
+      const blob = new Blob([buf], { type: mime || 'application/x-mimearchive' });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = suggestedName;       // basename only; keeps last-used dir
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+
+      // Cleanup
+      setTimeout(() => {
+        try { document.body.removeChild(a); } catch {}
+        try { URL.revokeObjectURL(url); } catch {}
+      }, 60_000);
+
+      sendResponse({ ok: true });
+    } catch (err) {
+      console.error('[Archiver] in-page save failed:', err);
+      sendResponse({ ok: false, error: String(err?.message || err) });
+    }
+    return true; // keep the message channel open for sendResponse
+  }
+});
+
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
