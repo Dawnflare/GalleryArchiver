@@ -67,6 +67,7 @@ async function waitForVideosFrozen(tabId, timeoutMs = 4000) {
     try {
       const res = await sendToContent('ARCHIVER_HAS_UNFROZEN_VIDEOS', {}, tabId);
       if (!res || res.count === 0) return;
+      await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {}, tabId);
     } catch (_) {
       return; // no listener or other error
     }

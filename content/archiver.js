@@ -477,7 +477,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         img.alt = 'Video snapshot';
 
         const loaded = await finalizeIfGood(img);
-        if (!loaded) { fail++; continue; }
+        if (!loaded) fail++;
 
         // Keep sizing consistent with the original gallery cards
         img.style.width = '100%';
@@ -522,7 +522,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         img.alt = 'Video snapshot';
 
         const loaded = await finalizeIfGood(img);
-        if (!loaded) { fail++; continue; }
+        if (!loaded) fail++;
 
         const cs = getComputedStyle(v);
         img.style.width = cs.width;
