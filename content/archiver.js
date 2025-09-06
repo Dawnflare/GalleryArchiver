@@ -328,6 +328,57 @@
     }
   });
 
+// Save MHTML by clicking a hidden <a download> IN THE PAGE (preserves last-used folder)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE') {
+    (async () => {
+      try {
+        const { bytes, blobUrl, mime, suggestedName } = msg.payload || {};
+
+        let blob;
+        if (blobUrl) {
+          const res = await fetch(blobUrl);
+          const fetched = await res.blob();
+          const ab = await fetched.arrayBuffer();
+          blob = new Blob([ab], { type: mime || fetched.type || 'application/x-mimearchive' });
+        } else if (bytes instanceof ArrayBuffer) {
+          blob = new Blob([new Uint8Array(bytes)], { type: mime || 'application/x-mimearchive' });
+        } else if (ArrayBuffer.isView(bytes)) {
+          blob = new Blob([new Uint8Array(bytes.buffer)], { type: mime || 'application/x-mimearchive' });
+        } else if (typeof bytes === 'string' && bytes.startsWith('data:')) {
+          const res = await fetch(bytes);
+          blob = await res.blob();
+          if (mime && blob.type !== mime) {
+            blob = new Blob([await blob.arrayBuffer()], { type: mime });
+          }
+        } else {
+          console.warn('[Archiver] unexpected bytes payload:', { type: typeof bytes, ctor: bytes?.constructor?.name });
+          blob = new Blob([], { type: mime || 'application/x-mimearchive' });
+        }
+
+        console.log('[Archiver] save blob size:', blob.size, 'type:', blob.type);
+
+        const url = URL.createObjectURL(blob);              // page-origin blob URL
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = suggestedName || 'archive.mhtml';      // basename only
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try { a.remove(); } catch {}
+          try { URL.revokeObjectURL(url); } catch {}
+        }, 300000);
+        sendResponse({ ok: true });
+      } catch (err) {
+        console.error('[Archiver] in-page save failed:', err);
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true; // keep the message channel open for sendResponse
+  }
+});
+
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
