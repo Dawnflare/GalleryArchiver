@@ -72,9 +72,9 @@ function restoreOptions() {
       const find = (name) => commands.find((c) => c.name === name)?.shortcut || '';
       const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = `(${val})`; };
       set('startShortcutLabel', find('start') || 'Alt+1');
-      set('resetShortcutLabel', find('reset') || 'Alt+Shift+R');
       set('startSaveShortcutLabel', find('startAndSave') || 'Alt+3');
       set('saveShortcutLabel', find('save') || 'Alt+2');
+      set('saveAllTabsShortcutLabel', find('saveAllTabs') || 'Alt+4');
     });
   }
 }
@@ -124,7 +124,7 @@ $('save')?.addEventListener('click', async () => {
   }
 });
 
-$('saveAllTabs')?.addEventListener('click', async () => {
+async function doSaveAllTabs() {
   console.log('[GA][POPUP] Save all tabs clicked');
   try {
     const tabs = await chrome.tabs.query({ currentWindow: true });
@@ -137,6 +137,15 @@ $('saveAllTabs')?.addEventListener('click', async () => {
     }
   } catch (err) {
     console.error('[GA][POPUP] Save all tabs error:', err);
+    throw err;
+  }
+}
+
+$('saveAllTabs')?.addEventListener('click', async () => {
+  try {
+    await doSaveAllTabs();
+  } catch {
+    // handled in doSaveAllTabs
   }
 });
 
@@ -236,6 +245,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         await doSaveInPage();
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === 'ARCHIVER_POPUP_SAVE_ALL_TABS') {
+    (async () => {
+      try {
+        await doSaveAllTabs();
         sendResponse({ ok: true });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });

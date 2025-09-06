@@ -28,12 +28,6 @@
       },
       "description": "Start capturing"
     },
-    "reset": {
-      "suggested_key": {
-        "default": "Alt+Shift+R"
-      },
-      "description": "Reset and reload"
-    },
     "save": {
       "suggested_key": {
         "default": "Alt+2"
@@ -45,6 +39,12 @@
         "default": "Alt+3"
       },
       "description": "Start and save archive"
+    },
+    "saveAllTabs": {
+      "suggested_key": {
+        "default": "Alt+4"
+      },
+      "description": "Save all tabs"
     }
   },
   "content_scripts": [

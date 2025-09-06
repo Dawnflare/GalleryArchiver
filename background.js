@@ -17,6 +17,23 @@ async function saveMHTML() {
   }
 }
 
+async function saveAllTabs() {
+  try {
+    if (chrome.action?.openPopup) {
+      await chrome.action.openPopup();
+    }
+  } catch (e) {
+    console.warn('openPopup failed:', e);
+  }
+
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'ARCHIVER_POPUP_SAVE_ALL_TABS' });
+    if (!res || res.ok !== true) throw new Error(res?.error || 'popup save all tabs failed');
+  } catch (e) {
+    console.error('[BG] save all tabs via popup failed:', e);
+  }
+}
+
 async function startAndSave(tabId) {
   if (!tabId) return;
   try {
@@ -64,16 +81,13 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'start') {
     await maybeOpenPopup();
     chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_START' });
-  } else if (command === 'reset') {
-    await maybeOpenPopup();
-    await chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_RESET', payload: {} });
-    await chrome.tabs.reload(targetTabId);
-    chrome.runtime.reload();
   } else if (command === 'save') {
     await saveMHTML();
   } else if (command === 'startAndSave') {
     await maybeOpenPopup();
     await startAndSave(targetTabId);
+  } else if (command === 'saveAllTabs') {
+    await saveAllTabs();
   }
 });
 

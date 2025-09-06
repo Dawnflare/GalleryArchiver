@@ -23,20 +23,6 @@ test('start command opens popup then starts capture', async () => {
   expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(321, { type: 'ARCHIVER_START' });
 });
 
-test('reset command opens popup then reloads tab and extension', async () => {
-  chrome.action.openPopup.mockClear();
-  chrome.tabs.sendMessage.mockClear();
-  chrome.tabs.reload.mockClear();
-  chrome.runtime.reload.mockClear();
-  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
-  await handler('reset');
-
-  expect(chrome.action.openPopup).toHaveBeenCalled();
-  expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(321, { type: 'ARCHIVER_RESET', payload: {} });
-  expect(chrome.tabs.reload).toHaveBeenCalledWith(321);
-  expect(chrome.runtime.reload).toHaveBeenCalled();
-});
-
 test('save command opens popup then delegates to popup for saving', async () => {
   chrome.action.openPopup.mockClear();
   chrome.runtime.sendMessage.mockClear();
@@ -47,5 +33,15 @@ test('save command opens popup then delegates to popup for saving', async () => 
   expect(chrome.action.openPopup).toHaveBeenCalled();
   expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_POPUP_SAVE' });
   expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+});
+
+test('saveAllTabs command opens popup then delegates to popup for saving all tabs', async () => {
+  chrome.action.openPopup.mockClear();
+  chrome.runtime.sendMessage.mockClear();
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  await handler('saveAllTabs');
+
+  expect(chrome.action.openPopup).toHaveBeenCalled();
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_POPUP_SAVE_ALL_TABS' });
 });
 

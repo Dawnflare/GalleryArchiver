@@ -21,7 +21,7 @@ function restoreOptions() {
     document.getElementById('startShortcut').value = find('start') || 'Alt+1';
     document.getElementById('saveShortcut').value = find('save') || 'Alt+2';
     document.getElementById('startSaveShortcut').value = find('startAndSave') || 'Alt+3';
-    document.getElementById('resetShortcut').value = find('reset') || 'Alt+Shift+R';
+    document.getElementById('saveAllTabsShortcut').value = find('saveAllTabs') || 'Alt+4';
   });
 }
 
@@ -29,7 +29,7 @@ function saveOptions() {
   const startShortcut = document.getElementById('startShortcut').value || 'Alt+1';
   const saveShortcut = document.getElementById('saveShortcut').value || 'Alt+2';
   const startSaveShortcut = document.getElementById('startSaveShortcut').value || 'Alt+3';
-  const resetShortcut = document.getElementById('resetShortcut').value || 'Alt+Shift+R';
+  const saveAllTabsShortcut = document.getElementById('saveAllTabsShortcut').value || 'Alt+4';
   const scrollDelay = parseInt(document.getElementById('scrollDelay').value || '300', 10);
   const stabilityTimeout = parseInt(document.getElementById('stabilityTimeout').value || '400', 10);
   const filenameBase = document.querySelector('input[name="filenameBase"]:checked')?.value || 'title';
@@ -49,7 +49,7 @@ function saveOptions() {
   updateShortcut('start', startShortcut);
   updateShortcut('save', saveShortcut);
   updateShortcut('startAndSave', startSaveShortcut);
-  updateShortcut('reset', resetShortcut);
+  updateShortcut('saveAllTabs', saveAllTabsShortcut);
 
   chrome.storage.local.set({ scrollDelay, stabilityTimeout, filenameBase, customFilename, timestampFormat }, () => {
     const status = document.getElementById('status');
