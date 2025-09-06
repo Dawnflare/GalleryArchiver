@@ -77,3 +77,30 @@ test('save command opens popup then saves via page context', async () => {
   expect(chrome.downloads.download).not.toHaveBeenCalled();
 });
 
+test('save command sends bytes when createObjectURL is unavailable', async () => {
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  const origCreate = global.URL.createObjectURL;
+  delete global.URL.createObjectURL;
+
+  chrome.action.openPopup.mockClear();
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.tabs.sendMessage.mockClear();
+  chrome.downloads.download.mockClear();
+
+  await handler('save');
+
+  expect(chrome.action.openPopup).toHaveBeenCalled();
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
+
+  const calls = chrome.tabs.sendMessage.mock.calls;
+  const saveCall = calls.find(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
+  expect(saveCall).toBeTruthy();
+  expect(saveCall[1].payload.blobUrl).toBeUndefined();
+  expect(Object.prototype.toString.call(saveCall[1].payload.bytes)).toBe('[object ArrayBuffer]');
+
+  expect(chrome.downloads.download).not.toHaveBeenCalled();
+
+  // restore
+  global.URL.createObjectURL = origCreate;
+});
+

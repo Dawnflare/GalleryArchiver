@@ -83,30 +83,54 @@ async function saveMHTML(tabId) {
     const ts = formatTimestamp(opts.timestampFormat);
     const suggestedName = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-    const blobUrl = URL.createObjectURL(blob);
+    let blobUrl;
+    let bytes;
+    if (typeof URL?.createObjectURL === 'function') {
+      try { blobUrl = URL.createObjectURL(blob); } catch {}
+    }
+    if (!blobUrl) {
+      // Fallback: send ArrayBuffer so content script can reconstruct Blob
+      bytes = await blob.arrayBuffer();
+    }
+
     try {
       const res = await chrome.tabs.sendMessage(tabId, {
         type: 'ARCHIVER_SAVE_MHTML_VIA_PAGE',
         payload: {
           suggestedName,
           mime: 'application/x-mimearchive',
-          blobUrl,
+          ...(blobUrl ? { blobUrl } : { bytes }),
         },
       });
       if (!res || res.ok !== true) throw new Error(res?.error || 'in-page save failed');
     } catch (e) {
       console.warn('[BG] In-page save failed, falling back to downloads API:', e);
-      const fallbackUrl = URL.createObjectURL(blob);
-      const id = await chrome.downloads.download({ url: fallbackUrl, filename: suggestedName, saveAs: true });
+      let downloadUrl = blobUrl;
+      if (!downloadUrl) {
+        const ab = bytes || await blob.arrayBuffer();
+        const view = new Uint8Array(ab);
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < view.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, view.subarray(i, i + chunkSize));
+        }
+        const base64 = btoa(binary);
+        downloadUrl = `data:application/x-mimearchive;base64,${base64}`;
+      }
+      const id = await chrome.downloads.download({ url: downloadUrl, filename: suggestedName, saveAs: true });
       const onChanged = (delta) => {
         if (delta.id === id && delta.state?.current === 'complete') {
           chrome.downloads.onChanged.removeListener(onChanged);
-          try { URL.revokeObjectURL(fallbackUrl); } catch {}
+          if (blobUrl) {
+            try { URL.revokeObjectURL(downloadUrl); } catch {}
+          }
         }
       };
       chrome.downloads.onChanged.addListener(onChanged);
     } finally {
-      try { URL.revokeObjectURL(blobUrl); } catch {}
+      if (blobUrl) {
+        try { URL.revokeObjectURL(blobUrl); } catch {}
+      }
     }
 
     await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
