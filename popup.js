@@ -52,9 +52,13 @@ async function normalizeMHTMLBlob(mhtmlData) {
   return new Blob([mhtmlData], { type: 'application/x-mimearchive' });
 }
 
-async function sendToContent(type, payload = {}) {
-  const tab = await getActiveTab();
-  return chrome.tabs.sendMessage(tab.id, { type, payload });
+async function sendToContent(type, payload = {}, tabId) {
+  let id = tabId;
+  if (id == null) {
+    const tab = await getActiveTab();
+    id = tab.id;
+  }
+  return chrome.tabs.sendMessage(id, { type, payload });
 }
 
 function restoreOptions() {
@@ -120,14 +124,30 @@ $('save')?.addEventListener('click', async () => {
   }
 });
 
+$('saveAllTabs')?.addEventListener('click', async () => {
+  console.log('[GA][POPUP] Save all tabs clicked');
+  try {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    for (const tab of tabs) {
+      try {
+        await doSaveInPage(tab);
+      } catch (err) {
+        console.error('[GA][POPUP] Save failed for tab', tab.id, err);
+      }
+    }
+  } catch (err) {
+    console.error('[GA][POPUP] Save all tabs error:', err);
+  }
+});
+
 // -------------------- save implementation (in‑page) --------------------
-async function doSaveInPage() {
-  const tab = await getActiveTab();
+async function doSaveInPage(tabParam) {
+  const tab = tabParam || await getActiveTab();
   console.log('[GA][POPUP] Active tab:', { id: tab?.id, title: tab?.title, url: tab?.url });
 
   // 1) Prepare the page
   try {
-    const prep = await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {});
+    const prep = await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {}, tab.id);
     console.log('[GA][POPUP] PREPARE result:', prep);
     await new Promise((r) => setTimeout(r, 120));
   } catch (e) {
@@ -165,7 +185,7 @@ async function doSaveInPage() {
       suggestedName,
       mime: 'application/x-mimearchive',
       blobUrl,
-    });
+    }, tab.id);
     console.log('[GA][POPUP] In‑page save response:', res);
     if (!res || res.ok !== true) throw new Error(res?.error || 'in‑page save failed');
   } catch (e) {
@@ -187,7 +207,7 @@ async function doSaveInPage() {
   }
 
   // 5) Tell content to stop overlays, etc.
-  await sendToContent('ARCHIVER_STOP');
+  await sendToContent('ARCHIVER_STOP', {}, tab.id);
 }
 
 // -------------------- live stats wiring --------------------
