@@ -4,6 +4,7 @@ document.body.innerHTML = `
   <span id="startSaveShortcutLabel"></span><button id="startSave"></button>
   <span id="resetShortcutLabel"></span><button id="reset"></button>
   <button id="stop"></button>
+  <button id="saveAllTabs"></button>
   <button id="options"></button>
   <input id="maxItems" />
   <span id="seen"></span>
@@ -108,4 +109,25 @@ test('options button opens the options page', () => {
   chrome.runtime.openOptionsPage.mockClear();
   document.getElementById('options').click();
   expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
+});
+
+test('saveAllTabs button triggers save for each tab', async () => {
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.tabs.sendMessage.mockClear();
+  chrome.tabs.query.mockImplementationOnce(() => Promise.resolve([
+    { id: 1, title: 'Tab 1', url: 'https://example.com/1' },
+    { id: 2, title: 'Tab 2', url: 'https://example.com/2' }
+  ]));
+  document.getElementById('saveAllTabs').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 300));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(2);
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenNthCalledWith(1, { tabId: 1 });
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenNthCalledWith(2, { tabId: 2 });
+  const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
+  expect(saveCalls.length).toBe(2);
+  expect(saveCalls[0][0]).toBe(1);
+  expect(saveCalls[1][0]).toBe(2);
 });
