@@ -81,11 +81,6 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'start') {
     await maybeOpenPopup();
     chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_START' });
-  } else if (command === 'reset') {
-    await maybeOpenPopup();
-    await chrome.tabs.sendMessage(targetTabId, { type: 'ARCHIVER_RESET', payload: {} });
-    await chrome.tabs.reload(targetTabId);
-    chrome.runtime.reload();
   } else if (command === 'save') {
     await saveMHTML();
   } else if (command === 'startAndSave') {

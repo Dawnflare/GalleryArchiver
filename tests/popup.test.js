@@ -3,7 +3,7 @@ document.body.innerHTML = `
   <span id="saveShortcutLabel"></span><button id="save"></button>
   <span id="startSaveShortcutLabel"></span><button id="startSave"></button>
   <span id="saveAllTabsShortcutLabel"></span><button id="saveAllTabs"></button>
-  <span id="resetShortcutLabel"></span><button id="reset"></button>
+  <button id="reset"></button>
   <button id="stop"></button>
   <button id="options"></button>
   <input id="maxItems" />
@@ -31,7 +31,6 @@ global.chrome = {
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
     { name: 'start', shortcut: 'Alt+1' },
-    { name: 'reset', shortcut: 'Alt+Shift+R' },
     { name: 'save', shortcut: 'Alt+2' },
     { name: 'startAndSave', shortcut: 'Alt+3' },
     { name: 'saveAllTabs', shortcut: 'Alt+4' }
@@ -95,7 +94,6 @@ test('reset button stops autoscroll, reloads the page and extension', async () =
 test('displays shortcut labels from commands API', async () => {
   await Promise.resolve();
   expect(document.getElementById('startShortcutLabel').textContent).toBe('(Alt+1)');
-  expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+Shift+R)');
   expect(document.getElementById('startSaveShortcutLabel').textContent).toBe('(Alt+3)');
   expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
   expect(document.getElementById('saveAllTabsShortcutLabel').textContent).toBe('(Alt+4)');

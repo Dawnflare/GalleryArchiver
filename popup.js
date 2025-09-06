@@ -72,7 +72,6 @@ function restoreOptions() {
       const find = (name) => commands.find((c) => c.name === name)?.shortcut || '';
       const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = `(${val})`; };
       set('startShortcutLabel', find('start') || 'Alt+1');
-      set('resetShortcutLabel', find('reset') || 'Alt+Shift+R');
       set('startSaveShortcutLabel', find('startAndSave') || 'Alt+3');
       set('saveShortcutLabel', find('save') || 'Alt+2');
       set('saveAllTabsShortcutLabel', find('saveAllTabs') || 'Alt+4');
