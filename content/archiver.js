@@ -445,6 +445,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return !!v.closest(A_IMG_PAGE);
   }
 
+  function looksLikeStandaloneVideo(v) {
+    return location.pathname.startsWith('/images/') && !v.closest(A_IMG_PAGE);
+  }
+
   async function freezeVideosInPlace() {
     const vids = Array.from(document.querySelectorAll('video'))
       .filter(looksLikeGalleryVideo)
@@ -480,12 +484,56 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return { processed, ok, fail, skipped, total: vids.length };
   }
 
+  async function freezeStandaloneVideos() {
+    const vids = Array.from(document.querySelectorAll('video'))
+      .filter(looksLikeStandaloneVideo)
+      .filter(v => !v.dataset.archiverFrozen);
+
+    let processed = 0, ok = 0, fail = 0, skipped = 0;
+
+    for (const v of vids) {
+      processed++;
+      try {
+        const still = await videoToStillURL(v);
+        if (!still) { skipped++; continue; }
+
+        const img = document.createElement('img');
+        img.src = still;
+        img.alt = 'Video snapshot';
+
+        const cs = getComputedStyle(v);
+        img.style.width = cs.width;
+        img.style.height = cs.height;
+        img.style.maxWidth = cs.maxWidth;
+        img.style.maxHeight = cs.maxHeight;
+        img.style.objectFit = cs.objectFit;
+        img.style.display = cs.display;
+
+        img.dataset.archiverFrozen = '1';
+        v.replaceWith(img);
+        ok++;
+      } catch (e) {
+        fail++;
+      }
+    }
+
+    return { processed, ok, fail, skipped, total: vids.length };
+  }
+
   // Message hook: popup will ask us to prepare the DOM before saving
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
-          const stats = await freezeVideosInPlace();
+          const s1 = await freezeVideosInPlace();
+          const s2 = await freezeStandaloneVideos();
+          const stats = {
+            processed: (s1.processed || 0) + (s2.processed || 0),
+            ok:        (s1.ok || 0) + (s2.ok || 0),
+            fail:      (s1.fail || 0) + (s2.fail || 0),
+            skipped:   (s1.skipped || 0) + (s2.skipped || 0),
+            total:     (s1.total || 0) + (s2.total || 0),
+          };
           sendResponse({ ok: true, stats });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
