@@ -60,6 +60,18 @@ test('save button triggers page capture and download', async () => {
   expect(fname.endsWith('.mhtml')).toBe(true);
 });
 
+test('handles ARCHIVER_POPUP_SAVE message', async () => {
+  const listener = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+  const resP = new Promise((resolve) => listener({ type: 'ARCHIVER_POPUP_SAVE' }, {}, resolve));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 150));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalled();
+  const res = await resP;
+  expect(res.ok).toBe(true);
+});
+
 test('reset button stops autoscroll, reloads the page and extension', async () => {
   chrome.tabs.reload.mockClear();
   chrome.tabs.sendMessage.mockClear();

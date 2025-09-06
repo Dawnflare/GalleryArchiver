@@ -195,7 +195,7 @@ restoreOptions();
 const statusEl = document.getElementById('status');
 if (statusEl) statusEl.textContent = '';
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'ARCHIVER_STATS') {
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = String(v ?? 0); };
     set('seen', msg.seen);
@@ -211,6 +211,17 @@ chrome.runtime.onMessage.addListener((msg) => {
     }
     const status = document.getElementById('status');
     if (status) status.textContent = msg.running ? 'Capturing...' : 'Ready to Save';
+  }
+  if (msg?.type === 'ARCHIVER_POPUP_SAVE') {
+    (async () => {
+      try {
+        await doSaveInPage();
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+    return true;
   }
 });
 
