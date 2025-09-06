@@ -6,7 +6,7 @@ Brave/Chromium extension that hoards infinite‑scroll galleries and saves them 
 - **Autoscroll capture** – start the extension and it automatically scrolls through the gallery, collecting high‑resolution images until the limit is reached or you stop it.
 - **Start / Stop / Save / Reset / Save all tabs** controls in the popup:
   - **Start** begins capturing and displays live stats (seen, captured, deduped) with a progress bar.
-  - **Stop** freezes the page so it can be exported.
+  - **Stop** halts the autoscroll process before the max item limit is reached.
   - **Save** downloads the page as an `.mhtml` archive.
   - **Save all tabs** downloads all open tabs as `.mhtml` archives.
   - **Reset** clears all state, reloads the page, and restarts the extension.
