@@ -49,3 +49,13 @@ test('save command opens popup then delegates to popup for saving', async () => 
   expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
 });
 
+test('saveAllTabs command opens popup then delegates to popup for saving all tabs', async () => {
+  chrome.action.openPopup.mockClear();
+  chrome.runtime.sendMessage.mockClear();
+  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
+  await handler('saveAllTabs');
+
+  expect(chrome.action.openPopup).toHaveBeenCalled();
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_POPUP_SAVE_ALL_TABS' });
+});
+

@@ -2,9 +2,9 @@ document.body.innerHTML = `
   <span id="startShortcutLabel"></span><button id="start"></button>
   <span id="saveShortcutLabel"></span><button id="save"></button>
   <span id="startSaveShortcutLabel"></span><button id="startSave"></button>
+  <span id="saveAllTabsShortcutLabel"></span><button id="saveAllTabs"></button>
   <span id="resetShortcutLabel"></span><button id="reset"></button>
   <button id="stop"></button>
-  <button id="saveAllTabs"></button>
   <button id="options"></button>
   <input id="maxItems" />
   <span id="seen"></span>
@@ -33,7 +33,8 @@ global.chrome = {
     { name: 'start', shortcut: 'Alt+1' },
     { name: 'reset', shortcut: 'Alt+Shift+R' },
     { name: 'save', shortcut: 'Alt+2' },
-    { name: 'startAndSave', shortcut: 'Alt+3' }
+    { name: 'startAndSave', shortcut: 'Alt+3' },
+    { name: 'saveAllTabs', shortcut: 'Alt+4' }
   ])) }
 };
 
@@ -97,6 +98,7 @@ test('displays shortcut labels from commands API', async () => {
   expect(document.getElementById('resetShortcutLabel').textContent).toBe('(Alt+Shift+R)');
   expect(document.getElementById('startSaveShortcutLabel').textContent).toBe('(Alt+3)');
   expect(document.getElementById('saveShortcutLabel').textContent).toBe('(Alt+2)');
+  expect(document.getElementById('saveAllTabsShortcutLabel').textContent).toBe('(Alt+4)');
 });
 
 test('startSave button sends start-and-save message', () => {
@@ -130,4 +132,22 @@ test('saveAllTabs button triggers save for each tab', async () => {
   expect(saveCalls.length).toBe(2);
   expect(saveCalls[0][0]).toBe(1);
   expect(saveCalls[1][0]).toBe(2);
+});
+
+test('handles ARCHIVER_POPUP_SAVE_ALL_TABS message', async () => {
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.tabs.sendMessage.mockClear();
+  chrome.tabs.query.mockImplementationOnce(() => Promise.resolve([
+    { id: 1, title: 'Tab 1', url: 'https://example.com/1' },
+    { id: 2, title: 'Tab 2', url: 'https://example.com/2' }
+  ]));
+  const listener = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+  const resP = new Promise((resolve) => listener({ type: 'ARCHIVER_POPUP_SAVE_ALL_TABS' }, {}, resolve));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 300));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(2);
+  const res = await resP;
+  expect(res.ok).toBe(true);
 });

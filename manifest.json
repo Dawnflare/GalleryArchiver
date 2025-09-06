@@ -45,6 +45,12 @@
         "default": "Alt+3"
       },
       "description": "Start and save archive"
+    },
+    "saveAllTabs": {
+      "suggested_key": {
+        "default": "Alt+4"
+      },
+      "description": "Save all tabs"
     }
   },
   "content_scripts": [
