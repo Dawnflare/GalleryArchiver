@@ -32,26 +32,32 @@ function formatTimestamp(fmt) {
   }
 }
 
+async function normalizeMHTMLBlob(mhtmlData) {
+  if (mhtmlData instanceof Blob) {
+    const buf = await mhtmlData.arrayBuffer();
+    return new Blob([buf], { type: 'application/x-mimearchive' });
+  }
+  if (mhtmlData?.arrayBuffer) {
+    const buf = await mhtmlData.arrayBuffer();
+    return new Blob([buf], { type: 'application/x-mimearchive' });
+  }
+  if (typeof mhtmlData === 'string') return new Blob([mhtmlData], { type: 'application/x-mimearchive' });
+  if (mhtmlData?.data) return new Blob([mhtmlData.data], { type: 'application/x-mimearchive' });
+  return new Blob([mhtmlData], { type: 'application/x-mimearchive' });
+}
+
 async function saveMHTML(tabId) {
   if (!tabId) return;
   try {
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_PREPARE_FOR_SAVE' });
+      await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_PREPARE_FOR_SAVE', payload: {} });
       await new Promise(r => setTimeout(r, 120));
     } catch (e) {
       console.warn('[BG] PREPARE failed (continuing anyway):', e);
     }
 
-    const mhtmlBlob = await chrome.pageCapture.saveAsMHTML({ tabId });
-    const ab = await mhtmlBlob.arrayBuffer();
-    const bytes = new Uint8Array(ab);
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    const base64 = btoa(binary);
-    const dataUrl = `data:application/x-mimearchive;base64,${base64}`;
+    const raw = await chrome.pageCapture.saveAsMHTML({ tabId });
+    const blob = await normalizeMHTMLBlob(raw);
 
     const tab = await chrome.tabs.get(tabId);
     const opts = await new Promise(r => chrome.storage.local.get({
@@ -65,7 +71,7 @@ async function saveMHTML(tabId) {
         baseName = sanitize(tab.url);
         break;
       case 'domain':
-        try { baseName = sanitize(new URL(tab.url).hostname); } catch { baseName = ''; }
+        try { baseName = sanitize(new URL(tab.url).hostname); } catch { baseName = 'archive'; }
         break;
       case 'custom':
         baseName = sanitize(opts.customFilename) || 'archive';
@@ -73,29 +79,37 @@ async function saveMHTML(tabId) {
       case 'title':
       default:
         baseName = sanitize(tab.title) || 'archive';
-        break;
     }
     const ts = formatTimestamp(opts.timestampFormat);
-    const filename = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
+    const suggestedName = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
 
-    const downloadId = await chrome.downloads.download({
-      url: dataUrl,
-      filename,
-      saveAs: true
-    });
-
-    const onChanged = delta => {
-      if (delta.id === downloadId && delta.state?.current === 'complete') {
-        chrome.downloads.onChanged.removeListener(onChanged);
-        chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
-      }
-    };
-
-    if (chrome.downloads.onChanged?.addListener) {
+    const blobUrl = URL.createObjectURL(blob);
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, {
+        type: 'ARCHIVER_SAVE_MHTML_VIA_PAGE',
+        payload: {
+          suggestedName,
+          mime: 'application/x-mimearchive',
+          blobUrl,
+        },
+      });
+      if (!res || res.ok !== true) throw new Error(res?.error || 'in-page save failed');
+    } catch (e) {
+      console.warn('[BG] In-page save failed, falling back to downloads API:', e);
+      const fallbackUrl = URL.createObjectURL(blob);
+      const id = await chrome.downloads.download({ url: fallbackUrl, filename: suggestedName, saveAs: true });
+      const onChanged = (delta) => {
+        if (delta.id === id && delta.state?.current === 'complete') {
+          chrome.downloads.onChanged.removeListener(onChanged);
+          try { URL.revokeObjectURL(fallbackUrl); } catch {}
+        }
+      };
       chrome.downloads.onChanged.addListener(onChanged);
-    } else {
-      chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
+    } finally {
+      try { URL.revokeObjectURL(blobUrl); } catch {}
     }
+
+    await chrome.tabs.sendMessage(tabId, { type: 'ARCHIVER_STOP' });
   } catch (e) {
     console.error('[BG] save flow error:', e);
   }
