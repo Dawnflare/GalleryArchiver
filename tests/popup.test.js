@@ -14,6 +14,7 @@ document.body.innerHTML = `
   <div id="status"></div>
 `;
 
+global.Blob = require('buffer').Blob;
 global.URL.createObjectURL = jest.fn(() => 'blob:fake');
 global.URL.revokeObjectURL = jest.fn();
 
@@ -24,7 +25,7 @@ global.chrome = {
     reload: jest.fn()
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)) },
+  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
   storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)), set: jest.fn() } },
   runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn(), sendMessage: jest.fn(), openOptionsPage: jest.fn() },
   commands: { getAll: jest.fn(cb => cb([
@@ -48,6 +49,11 @@ test('save button triggers page capture and download', async () => {
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
+  const saveMsgCall = chrome.tabs.sendMessage.mock.calls.find(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
+  expect(saveMsgCall).toBeTruthy();
+  expect(saveMsgCall[0]).toBe(123);
+  expect(saveMsgCall[1].payload.blobUrl).toBe('blob:fake');
+  expect(saveMsgCall[1].payload.mime).toBe('application/x-mimearchive');
   expect(chrome.downloads.download).toHaveBeenCalled();
   const fname = chrome.downloads.download.mock.calls[0][0].filename;
   expect(fname.startsWith('My_Tab_')).toBe(true);
