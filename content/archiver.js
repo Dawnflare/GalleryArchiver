@@ -394,6 +394,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 (function () {
   const A_IMG_PAGE = 'a[href*="/images/"], a[href^="/images/"]';
 
+  function finalizeIfGood(imgEl) {
+    return new Promise((resolve) => {
+      const done = () => resolve(true);
+      if (imgEl.complete && imgEl.naturalWidth > 0) return done();
+      imgEl.addEventListener('load', done, { once: true });
+      imgEl.addEventListener('error', () => resolve(false), { once: true });
+    });
+  }
+
   // Try to capture a first frame if poster is missing and CORS allows
   async function captureFirstFrameToDataURL(src) {
     try {
@@ -641,21 +650,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   /* ------------------------- Message integration ------------------------- */
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
           const root = getGalleryRoot();
           ensureGridStyles(root);
-          // tiny settle for paint
           await new Promise(r => setTimeout(r, 30));
-          sendResponse(Object.assign({ ok:true }, res));
-        } catch (e) {
-          sendResponse({ ok:false, error:String(e) });
+        } catch (_) {
+          /* ignore */
         }
       })();
-      return true; // async
     }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
