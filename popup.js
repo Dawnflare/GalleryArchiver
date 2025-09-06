@@ -158,14 +158,13 @@ async function doSaveInPage() {
   const suggestedName = `${baseName}${ts ? '_' + ts : ''}.mhtml`;
   console.log('[GA][POPUP] Suggested name:', suggestedName);
 
-  // 4) Send bytes to the **content script** to save via in‑page anchor
-  const ab = await blob.arrayBuffer();
+  // 4) Send blobUrl to the **content script** to save via in‑page anchor
+  const blobUrl = URL.createObjectURL(blob);
   try {
     const res = await sendToContent('ARCHIVER_SAVE_MHTML_VIA_PAGE', {
       suggestedName,
       mime: 'application/x-mimearchive',
-      // structured‑clone moves the buffer efficiently
-      bytes: ab,
+      blobUrl,
     });
     console.log('[GA][POPUP] In‑page save response:', res);
     if (!res || res.ok !== true) throw new Error(res?.error || 'in‑page save failed');
@@ -173,16 +172,18 @@ async function doSaveInPage() {
     console.warn('[GA][POPUP] In‑page save failed, falling back to downloads API:', e);
 
     // Fallback: downloads API with blob URL + filename (will likely open default dir)
-    const blobUrl = URL.createObjectURL(blob);
-    const id = await chrome.downloads.download({ url: blobUrl, filename: suggestedName, saveAs: true });
+    const fallbackUrl = URL.createObjectURL(blob);
+    const id = await chrome.downloads.download({ url: fallbackUrl, filename: suggestedName, saveAs: true });
     const onChanged = (delta) => {
       if (delta.id === id && delta.state?.current === 'complete') {
         chrome.downloads.onChanged.removeListener(onChanged);
-        URL.revokeObjectURL(blobUrl);
+        URL.revokeObjectURL(fallbackUrl);
         console.log('[GA][POPUP] Fallback download complete');
       }
     };
     chrome.downloads.onChanged.addListener(onChanged);
+  } finally {
+    try { URL.revokeObjectURL(blobUrl); } catch {}
   }
 
   // 5) Tell content to stop overlays, etc.
