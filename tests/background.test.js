@@ -1,26 +1,16 @@
-global.btoa = str => Buffer.from(str, 'binary').toString('base64');
-global.Blob = require('buffer').Blob;
-global.URL.createObjectURL = jest.fn(() => 'blob:fake');
-global.URL.revokeObjectURL = jest.fn();
-
-const sendMessage = jest.fn((tabId, msg) => {
-  if (msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE') return Promise.resolve({ ok: true });
-  return Promise.resolve({});
-});
-
 global.chrome = {
   action: { openPopup: jest.fn(() => Promise.resolve()) },
   tabs: {
     query: jest.fn(() => Promise.resolve([{ id: 321 }])),
-    get: jest.fn(() => Promise.resolve({ id: 321, title: 'My Tab', url: 'https://example.com/path' })),
-    sendMessage,
+    sendMessage: jest.fn(),
     reload: jest.fn(),
   },
-  pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
-  downloads: { download: jest.fn(() => Promise.resolve(1)), onChanged: { addListener: jest.fn(), removeListener: jest.fn() } },
-  runtime: { onMessage: { addListener: jest.fn() }, reload: jest.fn() },
+  runtime: {
+    onMessage: { addListener: jest.fn() },
+    reload: jest.fn(),
+    sendMessage: jest.fn(() => Promise.resolve({ ok: true })),
+  },
   commands: { onCommand: { addListener: jest.fn() } },
-  storage: { local: { get: jest.fn((defaults, cb) => cb(defaults)) } }
 };
 
 require('../background.js');
@@ -47,60 +37,15 @@ test('reset command opens popup then reloads tab and extension', async () => {
   expect(chrome.runtime.reload).toHaveBeenCalled();
 });
 
-test('save command opens popup then saves via page context', async () => {
+test('save command opens popup then delegates to popup for saving', async () => {
   chrome.action.openPopup.mockClear();
-  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.runtime.sendMessage.mockClear();
   chrome.tabs.sendMessage.mockClear();
-  chrome.downloads.download.mockClear();
   const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
   await handler('save');
 
   expect(chrome.action.openPopup).toHaveBeenCalled();
-  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-
-  const calls = chrome.tabs.sendMessage.mock.calls;
-  const prepareCall = calls.find(([, msg]) => msg.type === 'ARCHIVER_PREPARE_FOR_SAVE');
-  expect(prepareCall).toBeTruthy();
-
-  const saveCall = calls.find(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
-  expect(saveCall).toBeTruthy();
-  expect(saveCall[0]).toBe(321);
-  expect(saveCall[1].payload.blobUrl).toBe('blob:fake');
-  expect(saveCall[1].payload.mime).toBe('application/x-mimearchive');
-  const fname = saveCall[1].payload.suggestedName;
-  expect(fname.startsWith('My_Tab_')).toBe(true);
-  expect(fname.endsWith('.mhtml')).toBe(true);
-
-  const stopCall = calls.find(([, msg]) => msg.type === 'ARCHIVER_STOP');
-  expect(stopCall).toBeTruthy();
-
-  expect(chrome.downloads.download).not.toHaveBeenCalled();
-});
-
-test('save command sends bytes when createObjectURL is unavailable', async () => {
-  const handler = chrome.commands.onCommand.addListener.mock.calls[0][0];
-  const origCreate = global.URL.createObjectURL;
-  delete global.URL.createObjectURL;
-
-  chrome.action.openPopup.mockClear();
-  chrome.pageCapture.saveAsMHTML.mockClear();
-  chrome.tabs.sendMessage.mockClear();
-  chrome.downloads.download.mockClear();
-
-  await handler('save');
-
-  expect(chrome.action.openPopup).toHaveBeenCalled();
-  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 321 });
-
-  const calls = chrome.tabs.sendMessage.mock.calls;
-  const saveCall = calls.find(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
-  expect(saveCall).toBeTruthy();
-  expect(saveCall[1].payload.blobUrl).toBeUndefined();
-  expect(Object.prototype.toString.call(saveCall[1].payload.bytes)).toBe('[object ArrayBuffer]');
-
-  expect(chrome.downloads.download).not.toHaveBeenCalled();
-
-  // restore
-  global.URL.createObjectURL = origCreate;
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_POPUP_SAVE' });
+  expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
 });
 
