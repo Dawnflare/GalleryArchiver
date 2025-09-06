@@ -403,6 +403,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   }
 
+  // Fetch an image URL and return a data URL. Returns '' on failure.
+  async function imageURLToDataURL(url) {
+    try {
+      const res = await fetch(url, { credentials: 'omit' });
+      const blob = await res.blob();
+      return await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => resolve('');
+        fr.readAsDataURL(blob);
+      });
+    } catch (_) {
+      return '';
+    }
+  }
+
   // Try to capture a first frame if poster is missing and CORS allows
   async function captureFirstFrameToDataURL(src) {
     try {
@@ -438,8 +454,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   async function videoToStillURL(videoEl) {
-    // 1) Prefer the poster (already optimized on Civitai CDN, tiny and fast)
-    if (videoEl.poster) return videoEl.poster;
+    // 1) Prefer the poster; convert to data URL so saved pages stay self‑contained
+    if (videoEl.poster) {
+      const dataUrl = await imageURLToDataURL(videoEl.poster);
+      if (dataUrl) return dataUrl;
+      return videoEl.poster;
+    }
 
     // 2) Otherwise try to grab a frame from an actual source
     const direct = videoEl.currentSrc ||
@@ -473,18 +493,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!still) { skipped++; continue; }
 
         const img = document.createElement('img');
-        img.src = still;
         img.alt = 'Video snapshot';
-
-        const loaded = await finalizeIfGood(img);
-        if (!loaded) fail++;
 
         // Keep sizing consistent with the original gallery cards
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
         img.style.display = 'block';
-        img.dataset.archiverFrozen = '1';
 
         // Strip sources to avoid embedding videos
         v.pause?.();
@@ -495,6 +510,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         // Replace the <video> in place; anchor/href stays intact
         v.replaceWith(img);
+
+        img.src = still;
+        const loaded = await finalizeIfGood(img);
+        if (!loaded) fail++;
+        img.dataset.archiverFrozen = '1';
         ok++;
       } catch (e) {
         fail++;
@@ -517,21 +537,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const still = await videoToStillURL(v);
         if (!still) { skipped++; continue; }
 
-        const img = document.createElement('img');
-        img.src = still;
-        img.alt = 'Video snapshot';
-
-        const loaded = await finalizeIfGood(img);
-        if (!loaded) fail++;
-
         const cs = getComputedStyle(v);
+        const img = document.createElement('img');
+        img.alt = 'Video snapshot';
         img.style.width = cs.width;
         img.style.height = cs.height;
         img.style.maxWidth = cs.maxWidth;
         img.style.maxHeight = cs.maxHeight;
         img.style.objectFit = cs.objectFit;
         img.style.display = cs.display;
-        img.dataset.archiverFrozen = '1';
 
         // Strip sources to avoid embedding videos
         v.pause?.();
@@ -541,6 +555,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         v.load?.();
 
         v.replaceWith(img);
+
+        img.src = still;
+        const loaded = await finalizeIfGood(img);
+        if (!loaded) fail++;
+        img.dataset.archiverFrozen = '1';
         ok++;
       } catch (e) {
         fail++;
