@@ -543,7 +543,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Message hook: popup will ask us to prepare the DOM before saving
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg && msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+    if (!msg) return;
+    if (msg.type === 'ARCHIVER_HAS_UNFROZEN_VIDEOS') {
+      const count = document.querySelectorAll('video:not([data-archiver-frozen])').length;
+      sendResponse({ count });
+      return;
+    }
+    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
           const s1 = await freezeVideosInPlace();
