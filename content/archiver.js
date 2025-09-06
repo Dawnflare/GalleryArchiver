@@ -466,15 +466,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const img = document.createElement('img');
         img.src = still;
         img.alt = 'Video snapshot';
+
+        const loaded = await finalizeIfGood(img);
+        if (!loaded) { fail++; continue; }
+
         // Keep sizing consistent with the original gallery cards
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
         img.style.display = 'block';
+        img.dataset.archiverFrozen = '1';
+
+        // Strip sources to avoid embedding videos
+        v.pause?.();
+        v.removeAttribute('src');
+        v.removeAttribute('poster');
+        v.querySelectorAll('source').forEach(s => s.remove());
+        v.load?.();
 
         // Replace the <video> in place; anchor/href stays intact
         v.replaceWith(img);
-        v.dataset.archiverFrozen = '1';
         ok++;
       } catch (e) {
         fail++;
@@ -501,6 +512,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         img.src = still;
         img.alt = 'Video snapshot';
 
+        const loaded = await finalizeIfGood(img);
+        if (!loaded) { fail++; continue; }
+
         const cs = getComputedStyle(v);
         img.style.width = cs.width;
         img.style.height = cs.height;
@@ -508,8 +522,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         img.style.maxHeight = cs.maxHeight;
         img.style.objectFit = cs.objectFit;
         img.style.display = cs.display;
-
         img.dataset.archiverFrozen = '1';
+
+        // Strip sources to avoid embedding videos
+        v.pause?.();
+        v.removeAttribute('src');
+        v.removeAttribute('poster');
+        v.querySelectorAll('source').forEach(s => s.remove());
+        v.load?.();
+
         v.replaceWith(img);
         ok++;
       } catch (e) {
