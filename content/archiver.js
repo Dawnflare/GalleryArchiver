@@ -403,11 +403,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
   }
 
-  // Fetch an image URL and return a data URL. Returns '' on failure.
+  // Fetch an image URL and return a data URL. Returns '' on failure or if the
+  // response is clearly not an image (some "poster" URLs return the original
+  // video instead, which bloats the save if converted to data: URIs).
   async function imageURLToDataURL(url) {
     try {
       const res = await fetch(url, { credentials: 'omit' });
       const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) return '';
       return await new Promise((resolve) => {
         const fr = new FileReader();
         fr.onload = () => resolve(fr.result);
