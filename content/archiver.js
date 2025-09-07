@@ -393,6 +393,61 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ------------------------------------------------------------
 (function () {
   const A_IMG_PAGE = 'a[href*="/images/"], a[href^="/images/"]';
+  const TRANSPARENT_PX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+  function finalizeIfGood(imgEl) {
+    return new Promise((resolve) => {
+      const done = () => resolve(true);
+      if (imgEl.complete && imgEl.naturalWidth > 0) return done();
+      imgEl.addEventListener('load', done, { once: true });
+      imgEl.addEventListener('error', () => resolve(false), { once: true });
+    });
+  }
+
+  // Fetch an image URL and return a data URL. Returns '' on failure or if the
+  // response is clearly not an image (some "poster" URLs return the original
+  // video instead, which bloats the save if converted to data: URIs).
+  async function imageURLToDataURL(url) {
+    // Attempt to fetch the poster so we can inline it. Some image CDN endpoints
+    // require cookies, so include credentials. If the response is not an image
+    // or the fetch fails, fall back to trying via an <img> element and canvas.
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('not image');
+      return await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => resolve('');
+        fr.readAsDataURL(blob);
+      });
+    } catch (_) {
+      // Fallback: load through an <img> and draw to canvas. This avoids CORS
+      // restrictions when the server allows it and lets us downscale/encode.
+      return await new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            const MAX_W = 512;
+            if (width > MAX_W) {
+              height = Math.round(height * (MAX_W / width));
+              width = MAX_W;
+            }
+            const c = document.createElement('canvas');
+            c.width = width; c.height = height;
+            c.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(c.toDataURL('image/jpeg', 0.9));
+          } catch (_) {
+            resolve('');
+          }
+        };
+        img.onerror = () => resolve('');
+        img.src = url;
+      });
+    }
+  }
 
   // Try to capture a first frame if poster is missing and CORS allows
   async function captureFirstFrameToDataURL(src) {
@@ -405,7 +460,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       v.src = src;
 
       await new Promise((res, rej) => {
-        const to = setTimeout(() => rej(new Error('video load timeout')), 4000);
+        const to = setTimeout(() => rej(new Error('video load timeout')), 1000);
         v.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true });
         v.addEventListener('error', () => { clearTimeout(to); rej(new Error('video load error')); }, { once: true });
       });
@@ -429,8 +484,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   async function videoToStillURL(videoEl) {
-    // 1) Prefer the poster (already optimized on Civitai CDN, tiny and fast)
-    if (videoEl.poster) return videoEl.poster;
+    // 1) Prefer the poster; convert to data URL so saved pages stay self‑contained
+    if (videoEl.poster) {
+      const dataUrl = await imageURLToDataURL(videoEl.poster);
+      if (dataUrl) return dataUrl;
+      // If the poster can't be inlined fall through to frame capture
+    }
 
     // 2) Otherwise try to grab a frame from an actual source
     const direct = videoEl.currentSrc ||
@@ -445,6 +504,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return !!v.closest(A_IMG_PAGE);
   }
 
+  function looksLikeStandaloneVideo(v) {
+    return location.pathname.startsWith('/images/') && !v.closest(A_IMG_PAGE);
+  }
+
   async function freezeVideosInPlace() {
     const vids = Array.from(document.querySelectorAll('video'))
       .filter(looksLikeGalleryVideo)
@@ -457,21 +520,72 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       processed++;
       try {
         const still = await videoToStillURL(v);
-        if (!still) { skipped++; continue; }
-
         const img = document.createElement('img');
-        img.src = still;
         img.alt = 'Video snapshot';
+
         // Keep sizing consistent with the original gallery cards
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
         img.style.display = 'block';
 
+        // Strip sources to avoid embedding videos
+        v.pause?.();
+        v.removeAttribute('src');
+        v.removeAttribute('poster');
+        v.querySelectorAll('source').forEach(s => s.remove());
+        v.load?.();
+
         // Replace the <video> in place; anchor/href stays intact
         v.replaceWith(img);
-        v.dataset.archiverFrozen = '1';
-        ok++;
+
+        img.src = still || TRANSPARENT_PX;
+        const loaded = await finalizeIfGood(img);
+        if (still && loaded) ok++; else fail++;
+        img.dataset.archiverFrozen = '1';
+      } catch (e) {
+        fail++;
+      }
+    }
+
+    return { processed, ok, fail, skipped, total: vids.length };
+  }
+
+  async function freezeStandaloneVideos() {
+    const vids = Array.from(document.querySelectorAll('video'))
+      .filter(looksLikeStandaloneVideo)
+      .filter(v => !v.dataset.archiverFrozen);
+
+    let processed = 0, ok = 0, fail = 0, skipped = 0;
+
+    for (const v of vids) {
+      processed++;
+      try {
+        const still = await videoToStillURL(v);
+
+        const cs = getComputedStyle(v);
+        const img = document.createElement('img');
+        img.alt = 'Video snapshot';
+        img.style.width = cs.width;
+        img.style.height = cs.height;
+        img.style.maxWidth = cs.maxWidth;
+        img.style.maxHeight = cs.maxHeight;
+        img.style.objectFit = cs.objectFit;
+        img.style.display = cs.display;
+
+        // Strip sources to avoid embedding videos
+        v.pause?.();
+        v.removeAttribute('src');
+        v.removeAttribute('poster');
+        v.querySelectorAll('source').forEach(s => s.remove());
+        v.load?.();
+
+        v.replaceWith(img);
+
+        img.src = still || TRANSPARENT_PX;
+        const loaded = await finalizeIfGood(img);
+        if (still && loaded) ok++; else fail++;
+        img.dataset.archiverFrozen = '1';
       } catch (e) {
         fail++;
       }
@@ -482,10 +596,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Message hook: popup will ask us to prepare the DOM before saving
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg && msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
+    if (!msg) return;
+    if (msg.type === 'ARCHIVER_HAS_UNFROZEN_VIDEOS') {
+      const count = document.querySelectorAll('video:not([data-archiver-frozen])').length;
+      sendResponse({ count });
+      return;
+    }
+    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
-          const stats = await freezeVideosInPlace();
+          const s1 = await freezeVideosInPlace();
+          const s2 = await freezeStandaloneVideos();
+          const stats = {
+            processed: (s1.processed || 0) + (s2.processed || 0),
+            ok:        (s1.ok || 0) + (s2.ok || 0),
+            fail:      (s1.fail || 0) + (s2.fail || 0),
+            skipped:   (s1.skipped || 0) + (s2.skipped || 0),
+            total:     (s1.total || 0) + (s2.total || 0),
+          };
           sendResponse({ ok: true, stats });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
@@ -566,21 +694,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   /* ------------------------- Message integration ------------------------- */
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
           const root = getGalleryRoot();
           ensureGridStyles(root);
-          // tiny settle for paint
           await new Promise(r => setTimeout(r, 30));
-          sendResponse(Object.assign({ ok:true }, res));
-        } catch (e) {
-          sendResponse({ ok:false, error:String(e) });
+        } catch (_) {
+          /* ignore */
         }
       })();
-      return true; // async
     }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
