@@ -154,6 +154,25 @@ test('saveAllTabs skips tabs without permissions', async () => {
   expect(saveCalls[0][0]).toBe(1);
 });
 
+test('saveAllTabs skips tabs with unsupported URLs', async () => {
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.tabs.sendMessage.mockClear();
+  chrome.tabs.query.mockImplementationOnce(() => Promise.resolve([
+    { id: 1, title: 'Tab 1' },
+    { id: 2, title: 'Tab 2', url: 'https://example.com/2' }
+  ]));
+  document.getElementById('saveAllTabs').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 300));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(1);
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 2 });
+  const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
+  expect(saveCalls.length).toBe(1);
+  expect(saveCalls[0][0]).toBe(2);
+});
+
 test('handles ARCHIVER_POPUP_SAVE_ALL_TABS message', async () => {
   chrome.pageCapture.saveAsMHTML.mockClear();
   chrome.tabs.sendMessage.mockClear();

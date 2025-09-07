@@ -163,11 +163,11 @@ async function doSaveAllTabs() {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     for (const tab of tabs) {
       if (!tab.url || !/^https?:/i.test(tab.url)) {
-        console.warn('[GA][POPUP] Skipping unsupported URL', tab.id, tab.url);
+        console.debug('[GA][POPUP] Skipping unsupported URL', tab.id, tab.url || '(no url)');
         continue;
       }
       if (!(await hasCapturePermission(tab))) {
-        console.warn('[GA][POPUP] Skipping tab without permissions', tab.id, tab.url);
+        console.debug('[GA][POPUP] Skipping tab without permissions', tab.id, tab.url || '(no url)');
         continue;
       }
       try {
