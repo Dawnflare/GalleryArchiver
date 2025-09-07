@@ -3,6 +3,11 @@
   "name": "Gallery Archiver by Dawnflare",
   "version": "1.0",
   "description": "Capture infinite-scroll galleries into a single MHTML.  Features autoscroll and image persistence to compensate for dynamic image offloading by the gallery.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "activeTab",
     "scripting",
@@ -18,7 +23,12 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Gallery Archiver by Dawnflare"
+    "default_title": "Gallery Archiver by Dawnflare",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "options_page": "options.html",
   "commands": {
