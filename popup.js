@@ -61,15 +61,20 @@ async function sendToContent(type, payload = {}, tabId) {
   return chrome.tabs.sendMessage(id, { type, payload });
 }
 
-async function waitForVideosFrozen(tabId, timeoutMs = 4000) {
+async function waitForVideosFrozen(tabId, timeoutMs = 1000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    let res;
     try {
-      const res = await sendToContent('ARCHIVER_HAS_UNFROZEN_VIDEOS', {}, tabId);
-      if (!res || res.count === 0) return;
+      res = await sendToContent('ARCHIVER_HAS_UNFROZEN_VIDEOS', {}, tabId);
+    } catch (_) {
+      return;
+    }
+    if (!res || res.count === 0) return;
+    try {
       await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {}, tabId);
     } catch (_) {
-      return; // no listener or other error
+      return;
     }
     await new Promise(r => setTimeout(r, 100));
   }
@@ -170,8 +175,6 @@ async function doSaveInPage(tabParam) {
 
   // 1) Prepare the page
   try {
-    const prep = await sendToContent('ARCHIVER_PREPARE_FOR_SAVE', {}, tab.id);
-    console.log('[GA][POPUP] PREPARE result:', prep);
     await waitForVideosFrozen(tab.id);
     await new Promise((r) => setTimeout(r, 120));
   } catch (e) {

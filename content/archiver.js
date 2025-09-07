@@ -393,6 +393,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ------------------------------------------------------------
 (function () {
   const A_IMG_PAGE = 'a[href*="/images/"], a[href^="/images/"]';
+  const TRANSPARENT_PX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
   function finalizeIfGood(imgEl) {
     return new Promise((resolve) => {
@@ -459,7 +460,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       v.src = src;
 
       await new Promise((res, rej) => {
-        const to = setTimeout(() => rej(new Error('video load timeout')), 4000);
+        const to = setTimeout(() => rej(new Error('video load timeout')), 1000);
         v.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true });
         v.addEventListener('error', () => { clearTimeout(to); rej(new Error('video load error')); }, { once: true });
       });
@@ -538,13 +539,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Replace the <video> in place; anchor/href stays intact
         v.replaceWith(img);
 
-        if (still) {
-          img.src = still;
-          const loaded = await finalizeIfGood(img);
-          if (loaded) ok++; else fail++;
-        } else {
-          fail++;
-        }
+        img.src = still || TRANSPARENT_PX;
+        const loaded = await finalizeIfGood(img);
+        if (still && loaded) ok++; else fail++;
         img.dataset.archiverFrozen = '1';
       } catch (e) {
         fail++;
@@ -585,13 +582,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         v.replaceWith(img);
 
-        if (still) {
-          img.src = still;
-          const loaded = await finalizeIfGood(img);
-          if (loaded) ok++; else fail++;
-        } else {
-          fail++;
-        }
+        img.src = still || TRANSPARENT_PX;
+        const loaded = await finalizeIfGood(img);
+        if (still && loaded) ok++; else fail++;
         img.dataset.archiverFrozen = '1';
       } catch (e) {
         fail++;
