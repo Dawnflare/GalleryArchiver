@@ -80,6 +80,20 @@ async function waitForVideosFrozen(tabId, timeoutMs = 1000) {
   }
 }
 
+async function hasCapturePermission(tab) {
+  try {
+    const url = new URL(tab.url);
+    const originPattern = `${url.origin}/*`;
+    return await new Promise((resolve) => {
+      chrome.permissions.contains({ origins: [originPattern] }, (granted) => {
+        resolve(Boolean(granted));
+      });
+    });
+  } catch {
+    return false;
+  }
+}
+
 function restoreOptions() {
   chrome.storage.local.get({ maxItems: 200 }, (opts) => {
     const el = document.getElementById('maxItems');
@@ -148,6 +162,14 @@ async function doSaveAllTabs() {
   try {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     for (const tab of tabs) {
+      if (!tab.url || !/^https?:/i.test(tab.url)) {
+        console.debug('[GA][POPUP] Skipping unsupported URL', tab.id, tab.url || '(no url)');
+        continue;
+      }
+      if (!(await hasCapturePermission(tab))) {
+        console.debug('[GA][POPUP] Skipping tab without permissions', tab.id, tab.url || '(no url)');
+        continue;
+      }
       try {
         await doSaveInPage(tab);
       } catch (err) {
