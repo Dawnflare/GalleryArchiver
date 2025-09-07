@@ -407,10 +407,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // response is clearly not an image (some "poster" URLs return the original
   // video instead, which bloats the save if converted to data: URIs).
   async function imageURLToDataURL(url) {
+    // Attempt to fetch the poster so we can inline it. Some image CDN endpoints
+    // require cookies, so include credentials. If the response is not an image
+    // or the fetch fails, fall back to trying via an <img> element and canvas.
     try {
-      const res = await fetch(url, { credentials: 'omit' });
+      const res = await fetch(url, { credentials: 'include' });
       const blob = await res.blob();
-      if (!blob.type.startsWith('image/')) return '';
+      if (!blob.type.startsWith('image/')) throw new Error('not image');
       return await new Promise((resolve) => {
         const fr = new FileReader();
         fr.onload = () => resolve(fr.result);
@@ -418,7 +421,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         fr.readAsDataURL(blob);
       });
     } catch (_) {
-      return '';
+      // Fallback: load through an <img> and draw to canvas. This avoids CORS
+      // restrictions when the server allows it and lets us downscale/encode.
+      return await new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            const MAX_W = 512;
+            if (width > MAX_W) {
+              height = Math.round(height * (MAX_W / width));
+              width = MAX_W;
+            }
+            const c = document.createElement('canvas');
+            c.width = width; c.height = height;
+            c.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(c.toDataURL('image/jpeg', 0.9));
+          } catch (_) {
+            resolve('');
+          }
+        };
+        img.onerror = () => resolve('');
+        img.src = url;
+      });
     }
   }
 
