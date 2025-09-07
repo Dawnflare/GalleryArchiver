@@ -203,6 +203,15 @@ async function doSaveInPage(tabParam) {
     console.warn('[GA][POPUP] PREPARE failed (continuing):', e);
   }
 
+  // 1b) Freeze the DOM so the rendered state (e.g. highlighted buttons)
+  //     is preserved. This step inlines computed styles and strips scripts
+  //     before capturing.
+  try {
+    await sendToContent('ARCHIVER_FREEZE_PAGE', {}, tab.id);
+  } catch (e) {
+    console.warn('[GA][POPUP] FREEZE failed (continuing):', e);
+  }
+
   // 2) Capture MHTML → typed Blob
   const raw = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
   const blob = await normalizeMHTMLBlob(raw);

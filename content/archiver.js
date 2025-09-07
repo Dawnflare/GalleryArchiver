@@ -326,6 +326,29 @@
       stopRunning(false);
       sendResponse();
     }
+    if (msg?.type === 'ARCHIVER_FREEZE_PAGE') {
+      try {
+        // Inline computed styles and strip scripts so the current visual state
+        // is preserved in the saved MHTML. This is a lightweight snapshot step
+        // similar to the one used by SingleFile.
+        const all = document.querySelectorAll('*');
+        all.forEach(el => {
+          try {
+            const cs = getComputedStyle(el);
+            const txt = cs.cssText || Array.from(cs).map(p => `${p}:${cs.getPropertyValue(p)};`).join('');
+            el.setAttribute('style', txt);
+          } catch (_) {
+            /* ignore */
+          }
+        });
+        // Remove any script/stylesheet that could mutate the DOM when reopened.
+        document.querySelectorAll('script').forEach(s => s.remove());
+        document.querySelectorAll('link[rel="stylesheet"]').forEach(l => l.remove());
+        sendResponse && sendResponse({ ok: true });
+      } catch (e) {
+        if (sendResponse) sendResponse({ ok: false, error: String(e) });
+      }
+    }
   });
 
 // Save MHTML by clicking a hidden <a download> IN THE PAGE (preserves last-used folder)
