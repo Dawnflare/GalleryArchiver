@@ -566,12 +566,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const cs = getComputedStyle(v);
         const img = document.createElement('img');
         img.alt = 'Video snapshot';
-        img.style.width = cs.width;
-        img.style.height = cs.height;
-        img.style.maxWidth = cs.maxWidth;
-        img.style.maxHeight = cs.maxHeight;
+        img.style.width = '100%';
+        img.style.height = '100%';
         img.style.objectFit = cs.objectFit;
-        img.style.display = cs.display;
+        img.style.display = 'block';
+
+        const a = document.createElement('a');
+        a.href = location.href;
+        a.style.width = cs.width;
+        a.style.height = cs.height;
+        a.style.maxWidth = cs.maxWidth;
+        a.style.maxHeight = cs.maxHeight;
+        a.style.display = cs.display;
+        a.appendChild(img);
 
         // Strip sources to avoid embedding videos
         v.pause?.();
@@ -580,7 +587,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         v.querySelectorAll('source').forEach(s => s.remove());
         v.load?.();
 
-        v.replaceWith(img);
+        v.replaceWith(a);
 
         img.src = still || TRANSPARENT_PX;
         const loaded = await finalizeIfGood(img);
@@ -625,6 +632,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Optional debug helper (run in console if needed):
   //   window.__archiverFreezeVideos = freezeVideosInPlace;
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports.freezeStandaloneVideos = freezeStandaloneVideos;
+  }
 })();
 
 /* ------------------------------------------------------------------
