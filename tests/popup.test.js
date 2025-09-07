@@ -34,7 +34,8 @@ global.chrome = {
     { name: 'save', shortcut: 'Alt+2' },
     { name: 'startAndSave', shortcut: 'Alt+3' },
     { name: 'saveAllTabs', shortcut: 'Alt+4' }
-  ])) }
+  ])) },
+  permissions: { contains: jest.fn((_, cb) => cb(true)) }
 };
 
 require('../popup.js');
@@ -130,6 +131,27 @@ test('saveAllTabs button triggers save for each tab', async () => {
   expect(saveCalls.length).toBe(2);
   expect(saveCalls[0][0]).toBe(1);
   expect(saveCalls[1][0]).toBe(2);
+});
+
+test('saveAllTabs skips tabs without permissions', async () => {
+  chrome.pageCapture.saveAsMHTML.mockClear();
+  chrome.tabs.sendMessage.mockClear();
+  chrome.tabs.query.mockImplementationOnce(() => Promise.resolve([
+    { id: 1, title: 'Tab 1', url: 'https://example.com/1' },
+    { id: 2, title: 'Tab 2', url: 'https://example.com/2' }
+  ]));
+  chrome.permissions.contains.mockImplementationOnce((_, cb) => cb(true))
+    .mockImplementationOnce((_, cb) => cb(false));
+  document.getElementById('saveAllTabs').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(r => setTimeout(r, 300));
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(1);
+  expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 1 });
+  const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
+  expect(saveCalls.length).toBe(1);
+  expect(saveCalls[0][0]).toBe(1);
 });
 
 test('handles ARCHIVER_POPUP_SAVE_ALL_TABS message', async () => {
