@@ -487,7 +487,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (videoEl.poster) {
       const dataUrl = await imageURLToDataURL(videoEl.poster);
       if (dataUrl) return dataUrl;
-      return videoEl.poster;
+      // If the poster can't be inlined fall through to frame capture
     }
 
     // 2) Otherwise try to grab a frame from an actual source
@@ -519,8 +519,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       processed++;
       try {
         const still = await videoToStillURL(v);
-        if (!still) { skipped++; continue; }
-
         const img = document.createElement('img');
         img.alt = 'Video snapshot';
 
@@ -540,11 +538,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Replace the <video> in place; anchor/href stays intact
         v.replaceWith(img);
 
-        img.src = still;
-        const loaded = await finalizeIfGood(img);
-        if (!loaded) fail++;
+        if (still) {
+          img.src = still;
+          const loaded = await finalizeIfGood(img);
+          if (loaded) ok++; else fail++;
+        } else {
+          fail++;
+        }
         img.dataset.archiverFrozen = '1';
-        ok++;
       } catch (e) {
         fail++;
       }
@@ -564,7 +565,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       processed++;
       try {
         const still = await videoToStillURL(v);
-        if (!still) { skipped++; continue; }
 
         const cs = getComputedStyle(v);
         const img = document.createElement('img');
@@ -585,11 +585,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         v.replaceWith(img);
 
-        img.src = still;
-        const loaded = await finalizeIfGood(img);
-        if (!loaded) fail++;
+        if (still) {
+          img.src = still;
+          const loaded = await finalizeIfGood(img);
+          if (loaded) ok++; else fail++;
+        } else {
+          fail++;
+        }
         img.dataset.archiverFrozen = '1';
-        ok++;
       } catch (e) {
         fail++;
       }
