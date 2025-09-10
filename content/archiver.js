@@ -674,6 +674,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!galleryRoot) return;
     if (document.getElementById(STYLE_ID_GRID)) return;
 
+    // Locate the actual thumbnail grid within the gallery.
+    const grid = galleryRoot.querySelector(
+      '.mantine-SimpleGrid-root, [class*="SimpleGrid-root"], [class*="simpleGrid"]'
+    );
+    if (!grid) return;
+
+    // Mark the grid so our CSS targets only the thumbnails.
+    grid.setAttribute('data-archiver-grid', '');
+
     const s = document.createElement('style');
     s.id = STYLE_ID_GRID;
 
@@ -687,10 +696,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         width: 100% !important;
       }
 
-      /* force 6 columns only inside the gallery grid */
-      #gallery .mantine-SimpleGrid-root,
-      #gallery [class*="SimpleGrid-root"],
-      #gallery [class*="simpleGrid"] {
+      /* force 6 columns only inside the marked gallery grid */
+      #gallery [data-archiver-grid] {
         display: grid !important;
         grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
         gap: 12px !important;
@@ -702,6 +709,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   function cleanup() {
     const s1 = document.getElementById(STYLE_ID_GRID);
     if (s1) s1.remove();
+    const grid = document.querySelector('[data-archiver-grid]');
+    if (grid) grid.removeAttribute('data-archiver-grid');
   }
 
   /* ------------------------- Message integration ------------------------- */
