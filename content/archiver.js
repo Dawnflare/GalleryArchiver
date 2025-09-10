@@ -705,21 +705,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const container = root.querySelector('.mantine-Container-root, .mantine-container, [class*="Container-root"]');
     const grid = root.querySelector('.mantine-SimpleGrid-root, [class*="SimpleGrid-root"], [class*="simpleGrid"]');
 
-    const lock = (el, props) => {
+    const els = new Set([root, header, container, grid]);
+
+    const lock = (el) => {
       if (!el) return;
       if (!el.hasAttribute('data-archiver-style')) {
         el.setAttribute('data-archiver-style', el.getAttribute('style') || '');
       }
       const cs = getComputedStyle(el);
-      props.forEach(p => {
-        const v = cs[p];
-        if (v) el.style[p] = v;
-      });
+      for (const prop of cs) {
+        try {
+          const v = cs.getPropertyValue(prop);
+          if (v) el.style.setProperty(prop, v);
+        } catch (_) {
+          /* ignore */
+        }
+      }
     };
 
-    lock(header, ['height', 'paddingTop', 'paddingBottom']);
-    lock(container, ['height', 'paddingTop', 'paddingBottom']);
-    lock(grid, ['gridTemplateColumns', 'gap']);
+    els.forEach(lock);
   }
 
   function restoreGalleryStyles() {
