@@ -699,6 +699,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     document.head.appendChild(s);
   }
 
+  function freezeGalleryStyles(root) {
+    if (!root) return;
+    const header = root.querySelector('header');
+    const container = root.querySelector('.mantine-Container-root, .mantine-container, [class*="Container-root"]');
+    const grid = root.querySelector('.mantine-SimpleGrid-root, [class*="SimpleGrid-root"], [class*="simpleGrid"]');
+
+    const lock = (el, props) => {
+      if (!el) return;
+      if (!el.hasAttribute('data-archiver-style')) {
+        el.setAttribute('data-archiver-style', el.getAttribute('style') || '');
+      }
+      const cs = getComputedStyle(el);
+      props.forEach(p => {
+        const v = cs[p];
+        if (v) el.style[p] = v;
+      });
+    };
+
+    lock(header, ['height', 'paddingTop', 'paddingBottom']);
+    lock(container, ['height', 'paddingTop', 'paddingBottom']);
+    lock(grid, ['gridTemplateColumns', 'gap']);
+  }
+
+  function restoreGalleryStyles() {
+    document.querySelectorAll('[data-archiver-style]').forEach(el => {
+      const prev = el.getAttribute('data-archiver-style');
+      if (prev) el.setAttribute('style', prev); else el.removeAttribute('style');
+      el.removeAttribute('data-archiver-style');
+    });
+  }
+
   function cleanup() {
     const s1 = document.getElementById(STYLE_ID_GRID);
     if (s1) s1.remove();
@@ -712,6 +743,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           const root = getGalleryRoot();
           ensureGridStyles(root);
+          freezeGalleryStyles(root);
           await new Promise(r => setTimeout(r, 30));
         } catch (_) {
           /* ignore */
@@ -720,11 +752,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
+      restoreGalleryStyles();
     }
   });
 
   // Safety: restore on navigation
-  window.addEventListener('beforeunload', cleanup, { once: true });
+  window.addEventListener('beforeunload', () => { cleanup(); restoreGalleryStyles(); }, { once: true });
 })();
 
 /* ------------------------------------------------------------------
