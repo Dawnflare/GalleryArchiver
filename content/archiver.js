@@ -705,25 +705,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const container = root.querySelector('.mantine-Container-root, .mantine-container, [class*="Container-root"]');
     const grid = root.querySelector('.mantine-SimpleGrid-root, [class*="SimpleGrid-root"], [class*="simpleGrid"]');
 
-    const els = new Set([root, header, container, grid]);
-
-    const lock = (el) => {
+    const apply = (el, props) => {
       if (!el) return;
       if (!el.hasAttribute('data-archiver-style')) {
         el.setAttribute('data-archiver-style', el.getAttribute('style') || '');
       }
       const cs = getComputedStyle(el);
-      for (const prop of cs) {
-        try {
-          const v = cs.getPropertyValue(prop);
-          if (v) el.style.setProperty(prop, v);
-        } catch (_) {
-          /* ignore */
-        }
+      for (const prop of props) {
+        const v = cs.getPropertyValue(prop);
+        if (v) el.style.setProperty(prop, v);
       }
     };
 
-    els.forEach(lock);
+    apply(header, ['height', 'margin-top', 'margin-bottom', 'padding-top', 'padding-bottom', 'z-index']);
+    apply(container, ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'width', 'max-width']);
+    apply(grid, ['display', 'grid-template-columns', 'grid-auto-rows', 'grid-auto-columns', 'gap', 'row-gap', 'column-gap']);
   }
 
   function restoreGalleryStyles() {
