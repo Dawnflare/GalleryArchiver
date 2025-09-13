@@ -699,6 +699,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     document.head.appendChild(s);
   }
 
+  function freezeGalleryStyles(root) {
+    if (!root) return;
+    const header = root.querySelector('header');
+    const container = root.querySelector('.mantine-Container-root, .mantine-container, [class*="Container-root"]');
+    const grid = root.querySelector('.mantine-SimpleGrid-root, [class*="SimpleGrid-root"], [class*="simpleGrid"]');
+
+    const apply = (el, props) => {
+      if (!el) return;
+      if (!el.hasAttribute('data-archiver-style')) {
+        el.setAttribute('data-archiver-style', el.getAttribute('style') || '');
+      }
+      const cs = getComputedStyle(el);
+      for (const prop of props) {
+        const v = cs.getPropertyValue(prop);
+        if (v) el.style.setProperty(prop, v);
+      }
+    };
+
+    apply(header, ['height', 'margin-top', 'margin-bottom', 'padding-top', 'padding-bottom', 'z-index']);
+    apply(container, ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'width', 'max-width']);
+    apply(grid, ['display', 'grid-template-columns', 'grid-auto-rows', 'grid-auto-columns', 'gap', 'row-gap', 'column-gap']);
+  }
+
+  function restoreGalleryStyles() {
+    document.querySelectorAll('[data-archiver-style]').forEach(el => {
+      const prev = el.getAttribute('data-archiver-style');
+      if (prev) el.setAttribute('style', prev); else el.removeAttribute('style');
+      el.removeAttribute('data-archiver-style');
+    });
+  }
+
   function cleanup() {
     const s1 = document.getElementById(STYLE_ID_GRID);
     if (s1) s1.remove();
@@ -712,6 +743,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           const root = getGalleryRoot();
           ensureGridStyles(root);
+          freezeGalleryStyles(root);
           await new Promise(r => setTimeout(r, 30));
         } catch (_) {
           /* ignore */
@@ -720,11 +752,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
+      restoreGalleryStyles();
     }
   });
 
   // Safety: restore on navigation
-  window.addEventListener('beforeunload', cleanup, { once: true });
+  window.addEventListener('beforeunload', () => { cleanup(); restoreGalleryStyles(); }, { once: true });
 })();
 
 /* ------------------------------------------------------------------
