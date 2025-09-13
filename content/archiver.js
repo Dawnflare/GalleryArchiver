@@ -670,6 +670,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return (lca && lca !== document.body) ? lca : null;
   }
 
+  function waitForGalleryReady(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      const ready = () => {
+        const g = document.getElementById('gallery');
+        return (g && g.querySelector('.mantine-Stack-root') && g.querySelector('.mantine-Container-root')) ? g : null;
+      };
+      const existing = ready();
+      if (existing) return resolve(existing);
+
+      const observer = new MutationObserver(() => {
+        const el = ready();
+        if (el) {
+          observer.disconnect();
+          clearTimeout(timer);
+          resolve(el);
+        }
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+
+      const timer = setTimeout(() => {
+        observer.disconnect();
+        resolve(document.getElementById('gallery'));
+      }, timeoutMs);
+    });
+  }
+
   function ensureGridStyles(galleryRoot) {
     if (!galleryRoot) return;
     if (document.getElementById(STYLE_ID_GRID)) return;
@@ -710,7 +736,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
-          const root = getGalleryRoot();
+          const root = await waitForGalleryReady();
           ensureGridStyles(root);
           await new Promise(r => setTimeout(r, 30));
         } catch (_) {
