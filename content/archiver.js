@@ -22,8 +22,7 @@
     autoSave: false,
   };
 
-  const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
-  const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
+  const SEL_DETAIL_ANCHOR = 'a[href*="/images/"], a[href^="/images/"]';
 
   function absUrl(href) {
     try { return new URL(href, location.origin).toString(); } catch { return href; }
@@ -102,6 +101,40 @@
     timer = setTimeout(() => { mo.disconnect(); onStable(); }, timeoutMs);
   }
 
+  function getBackgroundImageUrl(el) {
+    if (!el || !el.ownerDocument) return '';
+    try {
+      const style = getComputedStyle(el);
+      if (!style) return '';
+      const bg = style.backgroundImage;
+      if (!bg || bg === 'none' || !bg.includes('url')) return '';
+      const match = bg.match(/url\(("|')?(.*?)("|')?\)/i);
+      if (!match || !match[2]) return '';
+      const raw = match[2].trim();
+      if (!raw || raw === 'none') return '';
+      return absUrl(raw);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function findBackgroundImageElement(anchor) {
+    const queue = [anchor];
+    const seen = new Set();
+    const LIMIT = 60;
+    while (queue.length && seen.size < LIMIT) {
+      const el = queue.shift();
+      if (!el || seen.has(el)) continue;
+      seen.add(el);
+      const url = getBackgroundImageUrl(el);
+      if (url && !isTinyDataURI(url)) {
+        return { el, url };
+      }
+      Array.from(el.children).forEach(child => queue.push(child));
+    }
+    return null;
+  }
+
   function processAnchorImg(anchor, img) {
     if (!state.running || state.captured >= state.maxItems) return;
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
@@ -141,52 +174,61 @@
     postStats();
   }
 
+  function processAnchorBackground(anchor) {
+    if (!state.running || state.captured >= state.maxItems) return;
+    const detailUrl = absUrl(anchor.getAttribute('href') || '');
+    if (!detailUrl) return;
+
+    if (state.seenDetailUrls.has(detailUrl)) return;
+    state.seenDetailUrls.add(detailUrl);
+    state.seen++;
+
+    const found = findBackgroundImageElement(anchor);
+    if (!found || !found.url) {
+      postStats();
+      return;
+    }
+
+    const targetEl = found.el;
+    const initialUrl = found.url;
+
+    stabilityWatcher(targetEl, state.stabilityTimeout, async () => {
+      if (!state.running || state.captured >= state.maxItems) return;
+      const bestNow = getBackgroundImageUrl(targetEl) || initialUrl;
+      if (!bestNow || isTinyDataURI(bestNow)) return;
+
+      const cloneImg = document.createElement('img');
+      cloneImg.src = bestNow;
+      state.bucket.appendChild(cloneImg);
+      const ok = await finalizeIfGood(cloneImg);
+      if (!ok || !state.running) {
+        cloneImg.remove();
+        return;
+      }
+
+      state.captured++;
+      state.deduped = state.seenDetailUrls.size;
+      state.lastNewItemAt = performance.now();
+      state.allImageUrls.add(absUrl(bestNow));
+      postStats();
+      postState();
+
+      if (state.captured >= state.maxItems) stopRunning(false, false);
+    });
+
+    postStats();
+  }
+
   function scanOnce() {
     if (!state.running || state.captured >= state.maxItems) return;
     ensureBucket();
-    // IMG-based cards
-    document.querySelectorAll(SEL_ANCHOR_IMG).forEach(img => {
+    document.querySelectorAll(SEL_DETAIL_ANCHOR).forEach(anchor => {
       if (state.captured >= state.maxItems) return;
-      const a = img.closest('a');
-      if (a) processAnchorImg(a, img);
-    });
-
-    // CSS background-image anchors (fallback)
-    document.querySelectorAll(SEL_ANCHOR_BG).forEach(a => {
-      if (state.captured >= state.maxItems) return;
-      const style = getComputedStyle(a);
-      const bg = style.backgroundImage;
-      if (bg && bg !== 'none') {
-        const m = bg.match(/url\(["']?(.*?)["']?\)/);
-        if (m && m[1]) {
-          const url = absUrl(m[1]);
-          const detailUrl = absUrl(a.getAttribute('href') || '');
-          if (!detailUrl || state.seenDetailUrls.has(detailUrl)) return;
-          if (state.captured >= state.maxItems) return;
-          state.seenDetailUrls.add(detailUrl);
-          state.seen++;
-
-          stabilityWatcher(a, state.stabilityTimeout, async () => {
-            if (!state.running || state.captured >= state.maxItems) return;
-            const cloneImg = document.createElement('img');
-            cloneImg.src = url;
-            state.bucket.appendChild(cloneImg);
-            const ok = await finalizeIfGood(cloneImg);
-            if (!ok || !state.running) {
-              cloneImg.remove();
-              return;
-            }
-            state.captured++;
-            state.deduped = state.seenDetailUrls.size;
-            state.lastNewItemAt = performance.now();
-            state.allImageUrls.add(absUrl(url));
-            postStats();
-            postState();
-            if (state.captured >= state.maxItems) stopRunning(false, false);
-          });
-
-          postStats();
-        }
+      const img = anchor.querySelector('img');
+      if (img) {
+        processAnchorImg(anchor, img);
+      } else {
+        processAnchorBackground(anchor);
       }
     });
   }

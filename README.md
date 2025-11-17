@@ -1,6 +1,6 @@
 # Gallery Archiver by Dawnflare
 
-Brave/Chromium extension that hoards infinite‑scroll galleries and saves them as a **single MHTML** file. Built for Civitai but may work on similar gallery pages.
+Brave/Chromium extension that hoards infinite‑scroll galleries and saves them as a **single MHTML** file. Built for Civitai but also tested on Tensor.Art's infinite galleries and other similar layouts.
 
 ## Features
 - **Autoscroll capture** – start the extension and it automatically scrolls through the gallery, collecting high‑resolution images until the limit is reached or you stop it.
