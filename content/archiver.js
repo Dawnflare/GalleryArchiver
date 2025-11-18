@@ -219,6 +219,47 @@
     });
   }
 
+  async function imageToCanvasDataURL(url) {
+    if (!url) return '';
+    return await new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.decoding = 'sync';
+        img.loading = 'eager';
+        const cleanup = () => {
+          img.onload = null;
+          img.onerror = null;
+        };
+        img.onload = () => {
+          try {
+            const w = Math.max(1, img.naturalWidth || img.width || 0);
+            const h = Math.max(1, img.naturalHeight || img.height || 0);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (err) {
+            console.warn('[Archiver] canvas inline failed', url, err);
+            resolve('');
+          } finally {
+            cleanup();
+          }
+        };
+        img.onerror = () => {
+          cleanup();
+          resolve('');
+        };
+        img.src = url;
+      } catch (err) {
+        console.warn('[Archiver] image load failed', url, err);
+        resolve('');
+      }
+    });
+  }
+
   async function fetchImageAsDataURL(url) {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
@@ -226,11 +267,12 @@
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('bad status');
       const blob = await res.blob();
-      if (!blob.type.startsWith('image/')) throw new Error('not image');
+      const type = blob.type || '';
+      if (type && !type.startsWith('image/')) throw new Error('not image');
       return await blobToDataURL(blob);
     } catch (err) {
       console.warn('[Archiver] failed to inline image', url, err);
-      return '';
+      return await imageToCanvasDataURL(url);
     }
   }
 
