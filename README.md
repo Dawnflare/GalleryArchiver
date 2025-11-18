@@ -21,6 +21,7 @@ Brave/Chromium extension that hoards infinite‑scroll galleries and saves them 
 - Works best when you save immediately after stopping.
  - Defaults: max items = 200, scroll delay = 300 ms, stability timeout = 400 ms.
  - Adjust these values before pressing **Start**.
+- On Tensor.Art, the extension now flashes its snapshot grid before saving so cards that were scrolled out of view still appear in the exported archive.
 
 ## Roadmap
 - Robust selectors & heuristics for different gallery layouts (starting with Civitai).

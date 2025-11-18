@@ -1,6 +1,8 @@
 /* Content script: core hoarding, anti-placeholder, auto-scroll, freeze */
 
 (() => {
+  const IS_TENSOR_HOST = /(?:^|\.)tensor\.art$/i.test(location.hostname || '');
+
   const state = {
     running: false,
     seen: 0,
@@ -20,6 +22,8 @@
     origHtmlStyle: '',
     origBodyStyle: '',
     autoSave: false,
+    bucketStyleBeforeSnapshot: '',
+    snapshotVisible: false,
   };
 
   const SEL_DETAIL_ANCHOR = 'a[href*="/images/"], a[href^="/images/"]';
@@ -33,9 +37,70 @@
       const bucket = document.createElement('div');
       bucket.id = 'civitai-archiver-bucket';
       bucket.style.display = 'none';
+      bucket.style.boxSizing = 'border-box';
       document.body.appendChild(bucket);
       state.bucket = bucket;
     }
+  }
+
+  function showSnapshotBucketIfNeeded() {
+    if (!IS_TENSOR_HOST) return;
+    ensureBucket();
+    const bucket = state.bucket;
+    if (!bucket) return;
+    if (!bucket.querySelector('img')) return; // nothing captured yet
+    if (state.snapshotVisible) return;
+
+    state.bucketStyleBeforeSnapshot = bucket.getAttribute('style') || '';
+    bucket.style.display = 'grid';
+    bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
+    bucket.style.gap = '12px';
+    bucket.style.padding = '16px';
+    bucket.style.backgroundColor = '#050505';
+    bucket.style.position = 'relative';
+    bucket.style.width = '100%';
+    bucket.style.maxWidth = '1400px';
+    bucket.style.margin = '0 auto';
+    bucket.style.zIndex = '2147483000';
+
+    if (!bucket.querySelector('[data-archiver-snapshot-heading]')) {
+      const heading = document.createElement('div');
+      heading.dataset.archiverSnapshotHeading = '1';
+      heading.textContent = 'Gallery Archiver Snapshot';
+      heading.style.gridColumn = '1 / -1';
+      heading.style.fontSize = '1.25rem';
+      heading.style.fontWeight = '600';
+      heading.style.color = '#fff';
+      heading.style.paddingBottom = '8px';
+      heading.style.textAlign = 'center';
+      bucket.prepend(heading);
+    }
+
+    bucket.querySelectorAll('img').forEach(img => {
+      img.style.width = '100%';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '6px';
+      img.loading = 'lazy';
+    });
+
+    state.snapshotVisible = true;
+  }
+
+  function hideSnapshotBucket() {
+    if (!state.bucket || !state.snapshotVisible) return;
+    if (state.bucketStyleBeforeSnapshot) {
+      state.bucket.setAttribute('style', state.bucketStyleBeforeSnapshot);
+    } else {
+      state.bucket.removeAttribute('style');
+    }
+    // ensure default hidden style comes back
+    state.bucket.style.display = 'none';
+    state.bucket.style.boxSizing = 'border-box';
+    const heading = state.bucket.querySelector('[data-archiver-snapshot-heading]');
+    if (heading) heading.remove();
+    state.snapshotVisible = false;
   }
 
   function postStats() {
@@ -333,6 +398,7 @@
 
   function stopRunning(freeze=false, restoreStyles=true) {
     state.running = false;
+    hideSnapshotBucket();
     if (state.observer) {
       state.observer.disconnect();
       state.observer = null;
@@ -654,6 +720,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
+          showSnapshotBucketIfNeeded();
           const s1 = await freezeVideosInPlace();
           const s2 = await freezeStandaloneVideos();
           const stats = {
