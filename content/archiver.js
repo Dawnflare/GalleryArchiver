@@ -274,17 +274,24 @@
   async function fetchImageAsDataURL(url) {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
-    try {
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) throw new Error('bad status');
-      const blob = await res.blob();
-      const type = blob.type || '';
-      if (type && !type.startsWith('image/')) throw new Error('not image');
-      return await blobToDataURL(blob);
-    } catch (err) {
-      console.warn('[Archiver] failed to inline image', url, err);
-      return await imageToCanvasDataURL(url);
+
+    const credentialModes = ['omit', 'include'];
+    for (const cred of credentialModes) {
+      try {
+        const res = await fetch(url, cred === 'include' ? { credentials: 'include' } : undefined);
+        if (!res.ok) throw new Error(`bad status: ${res.status}`);
+        const blob = await res.blob();
+        const type = blob.type || '';
+        if (type && !type.startsWith('image/')) throw new Error('not image');
+        return await blobToDataURL(blob);
+      } catch (err) {
+        if (cred === credentialModes[credentialModes.length - 1]) {
+          console.warn('[Archiver] failed to inline image', url, err);
+        }
+      }
     }
+
+    return await imageToCanvasDataURL(url);
   }
 
   async function inlineFromCandidates(candidates) {
@@ -625,45 +632,49 @@
   // response is clearly not an image (some "poster" URLs return the original
   // video instead, which bloats the save if converted to data: URIs).
   async function imageURLToDataURL(url) {
-    // Attempt to fetch the poster so we can inline it. Some image CDN endpoints
-    // require cookies, so include credentials. If the response is not an image
-    // or the fetch fails, fall back to trying via an <img> element and canvas.
-    try {
-      const res = await fetch(url, { credentials: 'include' });
-      const blob = await res.blob();
-      if (!blob.type.startsWith('image/')) throw new Error('not image');
-      return await new Promise((resolve) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result);
-        fr.onerror = () => resolve('');
-        fr.readAsDataURL(blob);
-      });
-    } catch (_) {
-      // Fallback: load through an <img> and draw to canvas. This avoids CORS
-      // restrictions when the server allows it and lets us downscale/encode.
-      return await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            let { width, height } = img;
-            const MAX_W = 512;
-            if (width > MAX_W) {
-              height = Math.round(height * (MAX_W / width));
-              width = MAX_W;
-            }
-            const c = document.createElement('canvas');
-            c.width = width; c.height = height;
-            c.getContext('2d').drawImage(img, 0, 0, width, height);
-            resolve(c.toDataURL('image/jpeg', 0.9));
-          } catch (_) {
-            resolve('');
-          }
-        };
-        img.onerror = () => resolve('');
-        img.src = url;
-      });
+    const credentialModes = ['omit', 'include'];
+    for (const cred of credentialModes) {
+      try {
+        const res = await fetch(url, cred === 'include' ? { credentials: 'include' } : undefined);
+        const blob = await res.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('not image');
+        return await new Promise((resolve) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = () => resolve('');
+          fr.readAsDataURL(blob);
+        });
+      } catch (err) {
+        if (cred === credentialModes[credentialModes.length - 1]) {
+          console.warn('[Archiver] failed to inline video poster', url, err);
+        }
+      }
     }
+
+    // Fallback: load through an <img> and draw to canvas. This avoids CORS
+    // restrictions when the server allows it and lets us downscale/encode.
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          const MAX_W = 512;
+          if (width > MAX_W) {
+            height = Math.round(height * (MAX_W / width));
+            width = MAX_W;
+          }
+          const c = document.createElement('canvas');
+          c.width = width; c.height = height;
+          c.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(c.toDataURL('image/jpeg', 0.9));
+        } catch (_) {
+          resolve('');
+        }
+      };
+      img.onerror = () => resolve('');
+      img.src = url;
+    });
   }
 
   // Try to capture a first frame if poster is missing and CORS allows
