@@ -295,24 +295,26 @@
   }
 
   async function inlineFromCandidates(candidates) {
+    let fallbackSrc = '';
     for (const src of candidates || []) {
       if (!src || isTinyDataURI(src)) continue;
+      if (!fallbackSrc) fallbackSrc = src;
       const dataUrl = await fetchImageAsDataURL(src);
       if (dataUrl) {
         return { dataUrl, resolvedSrc: src };
       }
     }
-    return { dataUrl: '', resolvedSrc: '' };
+    return { dataUrl: '', resolvedSrc: fallbackSrc };
   }
 
   async function cloneImageToCache(img, { href = null, wrapIfNoHref = false } = {}) {
     const candidates = resolveImageUrlCandidates(img);
     if (!candidates.length) return false;
     const { dataUrl, resolvedSrc } = await inlineFromCandidates(candidates);
-    if (!dataUrl) return false;
+    if (!dataUrl && !resolvedSrc) return false;
     ensureCache();
     const clone = document.createElement('img');
-    clone.src = dataUrl;
+    clone.src = dataUrl || resolvedSrc;
     clone.alt = img.alt || '';
     clone.loading = 'eager';
     clone.decoding = 'sync';
@@ -334,10 +336,10 @@
     const poster = absUrl(video.poster || '');
     const src = absUrl(video.currentSrc || (video.querySelector('source') && video.querySelector('source').src) || '');
     const { dataUrl, resolvedSrc } = await inlineFromCandidates([poster, src]);
-    if (!dataUrl) return false;
+    if (!dataUrl && !resolvedSrc) return false;
     ensureCache();
     const clone = document.createElement('img');
-    clone.src = dataUrl;
+    clone.src = dataUrl || resolvedSrc || poster || src;
     clone.alt = video.getAttribute('aria-label') || video.getAttribute('title') || '';
     let node = clone;
     const linkHref = href || resolvedSrc || poster || src || '';
@@ -607,8 +609,18 @@
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
 
+    if (typeof window !== 'undefined') {
+      window.__archiverUtils = {
+        absUrl,
+        pickBestFromSrcset,
+        isTinyDataURI,
+        resolveImageUrl,
+        resolveImageUrlCandidates,
+      };
+    }
+
     if (typeof module !== 'undefined' && module.exports) {
-      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl };
+      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl, resolveImageUrlCandidates };
     }
   })();
 
@@ -618,6 +630,60 @@
 (function () {
   const A_IMG_PAGE = 'a[href*="/images/"], a[href^="/images/"]';
   const TRANSPARENT_PX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  const HOST = location.hostname.replace(/^www\./, '');
+
+  function getSharedUtils() {
+    if (typeof window === 'undefined') return {};
+    return window.__archiverUtils || {};
+  }
+
+  function resolveTensorArtImageUrl(img) {
+    const utils = getSharedUtils();
+    const resolver = utils.resolveImageUrlCandidates;
+    if (typeof resolver !== 'function') return '';
+    const candidates = resolver(img) || [];
+    for (const url of candidates) {
+      if (url) return url;
+    }
+    return '';
+  }
+
+  function cleanupTensorAttrs(img) {
+    if (!img) return;
+    ['loading', 'decoding', 'srcset', 'sizes'].forEach(attr => img.removeAttribute(attr));
+    [
+      'data-src',
+      'data-srcset',
+      'data-original',
+      'data-original-src',
+      'data-url',
+      'data-image-url',
+      'data-lazy-src',
+      'data-placeholder',
+      'data-rmiz-src',
+    ].forEach(attr => img.removeAttribute(attr));
+  }
+
+  function devirtualizeTensorArtImages() {
+    if (HOST !== 'tensor.art') return { processed: 0, updated: 0 };
+    const root = document.querySelector('main') || document.body;
+    if (!root) return { processed: 0, updated: 0 };
+    const imgs = Array.from(root.querySelectorAll('article img, div[data-index] img'));
+    let updated = 0;
+    for (const img of imgs) {
+      const url = resolveTensorArtImageUrl(img) || img.currentSrc || img.src || '';
+      if (!url) continue;
+      if (img.getAttribute('src') !== url) {
+        img.src = url;
+      }
+      cleanupTensorAttrs(img);
+      img.loading = 'eager';
+      img.decoding = 'sync';
+      img.referrerPolicy = img.referrerPolicy || 'no-referrer-when-downgrade';
+      updated++;
+    }
+    return { processed: imgs.length, updated };
+  }
 
   function finalizeIfGood(imgEl) {
     return new Promise((resolve) => {
@@ -840,6 +906,7 @@
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
+          const tensor = devirtualizeTensorArtImages();
           const s1 = await freezeVideosInPlace();
           const s2 = await freezeStandaloneVideos();
           const stats = {
@@ -849,7 +916,7 @@
             skipped:   (s1.skipped || 0) + (s2.skipped || 0),
             total:     (s1.total || 0) + (s2.total || 0),
           };
-          sendResponse({ ok: true, stats });
+          sendResponse({ ok: true, stats, tensor });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
         }

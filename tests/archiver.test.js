@@ -1,6 +1,6 @@
 const path = require('path');
 
-let absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl;
+let absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl, resolveImageUrlCandidates;
 
 beforeAll(() => {
   global.chrome = {
@@ -10,7 +10,7 @@ beforeAll(() => {
     },
     storage: { local: { get: jest.fn() } },
   };
-  ({ absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl } = require('../content/archiver.js'));
+  ({ absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl, resolveImageUrlCandidates } = require('../content/archiver.js'));
 });
 
 describe('archiver utility functions', () => {
@@ -41,5 +41,16 @@ describe('archiver utility functions', () => {
     img.setAttribute('srcset', `${s3} 2048w, ${cdn} 1024w`);
     Object.defineProperty(img, 'currentSrc', { value: cdn, configurable: true });
     expect(resolveImageUrl(img)).toBe(cdn);
+  });
+
+  test('resolveImageUrlCandidates normalizes unique absolute URLs', () => {
+    const img = document.createElement('img');
+    img.setAttribute('src', '/foo.jpg');
+    img.setAttribute('data-src', '//cdn.example.com/foo.jpg');
+    Object.defineProperty(img, 'currentSrc', { value: 'https://tensor.art/foo.jpg', configurable: true });
+    const list = resolveImageUrlCandidates(img);
+    expect(list[0]).toBe('https://tensor.art/foo.jpg');
+    expect(list).toContain('http://localhost/foo.jpg');
+    expect(list).toContain('http://cdn.example.com/foo.jpg');
   });
 });
