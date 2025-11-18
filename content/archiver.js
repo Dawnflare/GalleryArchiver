@@ -11,8 +11,8 @@
     maxItems: 200,
     scrollDelay: 300,
     stabilityTimeout: 400,
-    items: new Map(), // key -> { detailUrl, imageUrl, el, state }
-    seenDetailUrls: new Set(), // dedupe by detail link
+    items: new Map(), // key -> { status: 'pending' | 'capturing' | 'captured' }
+    seenDetailUrls: new Set(), // successfully captured detail links
     allImageUrls: new Set(), // every image destined for archive
     observer: null,
     scrollTimer: null,
@@ -200,22 +200,51 @@
     return null;
   }
 
+  function markSeen(detailUrl) {
+    if (!detailUrl) return null;
+    let item = state.items.get(detailUrl);
+    if (!item) {
+      item = { status: 'pending' };
+      state.items.set(detailUrl, item);
+      state.seen++;
+      postStats();
+    }
+    return item;
+  }
+
+  function recordCapture(detailUrl) {
+    if (!detailUrl) return;
+    state.seenDetailUrls.add(detailUrl);
+    state.deduped = state.seenDetailUrls.size;
+  }
+
   function processAnchorImg(anchor, img) {
     if (!state.running || state.captured >= state.maxItems) return;
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
     if (!detailUrl) return;
 
-    if (state.seenDetailUrls.has(detailUrl)) return;
-    state.seenDetailUrls.add(detailUrl);
-    state.seen++;
+    const item = markSeen(detailUrl);
+    if (!item) return;
+    if (item.status === 'capturing' || item.status === 'captured') return;
 
     const initialUrl = pickBestFromSrcset(img) || img.src || '';
+    if (!initialUrl || isTinyDataURI(initialUrl)) {
+      item.status = 'pending';
+      return;
+    }
 
+    item.status = 'capturing';
     // Wait for image attributes to settle before cloning
     stabilityWatcher(img, state.stabilityTimeout, async () => {
-      if (!state.running || state.captured >= state.maxItems) return;
+      if (!state.running || state.captured >= state.maxItems) {
+        item.status = item.status === 'capturing' ? 'pending' : item.status;
+        return;
+      }
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
-      if (!bestNow || isTinyDataURI(bestNow)) return;
+      if (!bestNow || isTinyDataURI(bestNow)) {
+        item.status = 'pending';
+        return;
+      }
 
       const cloneImg = document.createElement('img');
       cloneImg.src = bestNow;
@@ -223,11 +252,13 @@
       const ok = await finalizeIfGood(cloneImg);
       if (!ok || !state.running) {
         cloneImg.remove();
+        item.status = 'pending';
         return;
       }
 
+      recordCapture(detailUrl);
+      item.status = 'captured';
       state.captured++;
-      state.deduped = state.seenDetailUrls.size;
       state.lastNewItemAt = performance.now();
       state.allImageUrls.add(absUrl(bestNow));
       postStats();
@@ -244,23 +275,31 @@
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
     if (!detailUrl) return;
 
-    if (state.seenDetailUrls.has(detailUrl)) return;
-    state.seenDetailUrls.add(detailUrl);
-    state.seen++;
+    const item = markSeen(detailUrl);
+    if (!item) return;
+    if (item.status === 'capturing' || item.status === 'captured') return;
 
     const found = findBackgroundImageElement(anchor);
-    if (!found || !found.url) {
+    if (!found || !found.url || isTinyDataURI(found.url)) {
+      item.status = 'pending';
       postStats();
       return;
     }
 
     const targetEl = found.el;
     const initialUrl = found.url;
+    item.status = 'capturing';
 
     stabilityWatcher(targetEl, state.stabilityTimeout, async () => {
-      if (!state.running || state.captured >= state.maxItems) return;
+      if (!state.running || state.captured >= state.maxItems) {
+        item.status = item.status === 'capturing' ? 'pending' : item.status;
+        return;
+      }
       const bestNow = getBackgroundImageUrl(targetEl) || initialUrl;
-      if (!bestNow || isTinyDataURI(bestNow)) return;
+      if (!bestNow || isTinyDataURI(bestNow)) {
+        item.status = 'pending';
+        return;
+      }
 
       const cloneImg = document.createElement('img');
       cloneImg.src = bestNow;
@@ -268,11 +307,13 @@
       const ok = await finalizeIfGood(cloneImg);
       if (!ok || !state.running) {
         cloneImg.remove();
+        item.status = 'pending';
         return;
       }
 
+      recordCapture(detailUrl);
+      item.status = 'captured';
       state.captured++;
-      state.deduped = state.seenDetailUrls.size;
       state.lastNewItemAt = performance.now();
       state.allImageUrls.add(absUrl(bestNow));
       postStats();
@@ -369,6 +410,7 @@
     state.seen = 0;
     state.captured = 0;
     state.deduped = 0;
+    state.items = new Map();
     state.seenDetailUrls.clear();
     state.allImageUrls = new Set();
     // Load options before starting capture
