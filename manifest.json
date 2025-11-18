@@ -19,7 +19,10 @@
     "https://civitai.com/*",
     "https://tensor.art/*",
     "https://www.tensor.art/*",
-    "https://image.tensorartsassets.com/*"
+    "https://image.tensorartsassets.com/*",
+    "https://*.tensorassets.com/*",
+    "https://*.tensorartsassets.com/*",
+    "https://tensor-art.s3.amazonaws.com/*"
   ],
   "background": {
     "service_worker": "background.js"
