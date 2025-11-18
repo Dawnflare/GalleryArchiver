@@ -1,6 +1,7 @@
 
 /* Simple flex layout for archived items allowing natural image sizes */
-#civitai-archiver-bucket {
+#civitai-archiver-bucket,
+#archiver-cache {
   display: none; /* hidden until freeze */
   box-sizing: border-box;
   padding: 12px;
@@ -8,20 +9,24 @@
   flex-wrap: wrap;
   align-items: flex-start;
 }
-#civitai-archiver-bucket.archiver-freeze {
+#civitai-archiver-bucket.archiver-freeze,
+#archiver-cache.archiver-freeze {
   display: flex !important;
 }
-#civitai-archiver-bucket article {
+#civitai-archiver-bucket article,
+#archiver-cache article {
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 8px;
   background: #111;
 }
-#civitai-archiver-bucket a {
+#civitai-archiver-bucket a,
+#archiver-cache a {
   text-decoration: none;
   color: inherit;
 }
-#civitai-archiver-bucket img {
+#civitai-archiver-bucket img,
+#archiver-cache img {
   width: auto;
   height: auto;
   display: block;

@@ -1,6 +1,121 @@
 /* Content script: core hoarding, anti-placeholder, auto-scroll, freeze */
 
 (() => {
+  const HOST = location.hostname.replace(/^www\./, '');
+
+  function absUrl(href) {
+    try { return new URL(href, location.origin).toString(); } catch { return href || ''; }
+  }
+
+  function pickBestFromSrcset(img) {
+    const ss = img.getAttribute('srcset');
+    if (!ss) return img.currentSrc || img.src || null;
+    const candidates = ss.split(',').map(s => s.trim()).map(token => {
+      const m = token.match(/^(.*)\s+(\d+)(w|x)$/);
+      if (m) return { url: absUrl(m[1].trim()), width: parseInt(m[2], 10), unit: m[3] };
+      return { url: absUrl(token.split(/\s+/)[0]), width: 0, unit: 'w' };
+    });
+    candidates.sort((a, b) => b.width - a.width);
+    return (candidates[0] && candidates[0].url) || img.currentSrc || img.src || null;
+  }
+
+  function isTinyDataURI(url) {
+    return /^data:/.test(url || '') && (url || '').length < 1024;
+  }
+
+  function getGalleryRootCivitai() {
+    const g = document.getElementById('gallery');
+    if (g) return g;
+    const anchors = Array.from(document.querySelectorAll('a[href*="/images/"], a[href^="/images/"]'));
+    if (!anchors.length) return document.body;
+    const sample = anchors.slice(0, 20);
+    const chains = sample.map(a => {
+      const list = [];
+      for (let n = a; n && n !== document.documentElement; n = n.parentElement) list.push(n);
+      return list;
+    });
+    for (const cand of chains[0] || []) {
+      if (chains.every(chain => chain.includes(cand))) return cand;
+    }
+    return document.getElementById('gallery') || document.body;
+  }
+
+  function selectCardsCivitai(root) {
+    const set = new Set();
+    root.querySelectorAll('a[href*="/images/"] img, a[href^="/images/"] img').forEach(img => {
+      const card = img.closest('a[href*="/images/"], a[href^="/images/"]') || img.parentElement;
+      if (card) set.add(card);
+    });
+    root.querySelectorAll('a[href*="/images/"], a[href^="/images/"]').forEach(a => set.add(a));
+    return Array.from(set);
+  }
+
+  function extractMediaFromCardCivitai(card) {
+    const anchorHref = card.getAttribute && card.getAttribute('href');
+    const img = card.querySelector('img');
+    if (img) {
+      return { type: 'image', imgEl: img, href: anchorHref ? absUrl(anchorHref) : null };
+    }
+    const video = card.querySelector('video');
+    if (video) {
+      return { type: 'video', videoEl: video, href: anchorHref ? absUrl(anchorHref) : null };
+    }
+    return null;
+  }
+
+  function getGalleryRootTensor() {
+    const imgs = Array.from(document.querySelectorAll('article img, div[data-index] img')).slice(0, 40);
+    if (!imgs.length) return document.querySelector('main') || document.body;
+    const cards = imgs.map(img => img.closest('article, div[data-index], [data-rmiz], .card, .group, .relative, .cursor-pointer'))
+      .filter(Boolean);
+    if (!cards.length) return document.querySelector('main') || document.body;
+    const chains = cards.map(n => {
+      const v = [];
+      for (let x = n; x && x !== document.documentElement; x = x.parentElement) v.push(x);
+      return v;
+    });
+    for (const cand of chains[0]) {
+      if (chains.every(chain => chain.includes(cand))) return cand;
+    }
+    return document.querySelector('main') || document.body;
+  }
+
+  function selectCardsTensor(root) {
+    const set = new Set();
+    root.querySelectorAll('article img, div[data-index] img').forEach(img => {
+      const card = img.closest('article, div[data-index]') || img.parentElement;
+      if (card) set.add(card);
+    });
+    return Array.from(set);
+  }
+
+  function extractMediaFromCardTensor(card) {
+    const img = card.querySelector('img');
+    if (img) return { type: 'image', imgEl: img, href: null };
+    const video = card.querySelector('video');
+    if (video) return { type: 'video', videoEl: video, href: null };
+    return null;
+  }
+
+  const adapterCivitai = {
+    getGalleryRoot: getGalleryRootCivitai,
+    selectCards: selectCardsCivitai,
+    extractMediaFromCard: extractMediaFromCardCivitai,
+  };
+
+  const adapterTensorArt = {
+    getGalleryRoot: getGalleryRootTensor,
+    selectCards: selectCardsTensor,
+    extractMediaFromCard: extractMediaFromCardTensor,
+  };
+
+  const adapters = {
+    'civitai.com': adapterCivitai,
+    'tensor.art': adapterTensorArt,
+  };
+
+  const ACTIVE_ADAPTER = adapters[HOST] || adapterCivitai;
+
   const state = {
     running: false,
     seen: 0,
@@ -9,33 +124,26 @@
     maxItems: 200,
     scrollDelay: 300,
     stabilityTimeout: 400,
-    items: new Map(), // key -> { detailUrl, imageUrl, el, state }
-    seenDetailUrls: new Set(), // dedupe by detail link
-    allImageUrls: new Set(), // every image destined for archive
+    items: new Map(),
+    allImageUrls: new Set(),
     observer: null,
     scrollTimer: null,
     lastNewItemAt: 0,
-    bucket: null,
+    cache: null,
     scrollEl: null,
     origHtmlStyle: '',
     origBodyStyle: '',
     autoSave: false,
+    adapter: ACTIVE_ADAPTER,
   };
 
-  const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
-  const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
-
-  function absUrl(href) {
-    try { return new URL(href, location.origin).toString(); } catch { return href; }
-  }
-
-  function ensureBucket() {
-    if (!state.bucket) {
-      const bucket = document.createElement('div');
-      bucket.id = 'civitai-archiver-bucket';
-      bucket.style.display = 'none';
-      document.body.appendChild(bucket);
-      state.bucket = bucket;
+  function ensureCache() {
+    if (!state.cache) {
+      const cache = document.createElement('div');
+      cache.id = 'archiver-cache';
+      cache.style.display = 'none';
+      document.body.appendChild(cache);
+      state.cache = cache;
     }
   }
 
@@ -45,7 +153,7 @@
       seen: state.seen,
       captured: state.captured,
       deduped: state.deduped,
-      total: state.allImageUrls.size
+      total: state.items.size
     });
   }
 
@@ -58,136 +166,146 @@
     });
   }
 
-  function pickBestFromSrcset(img) {
-    const ss = img.getAttribute('srcset');
-    if (!ss) return img.currentSrc || img.src || null;
-    // Parse candidates: "url widthDescriptor, url widthDescriptor, ..."
-    const candidates = ss.split(',').map(s => s.trim()).map(token => {
-      const m = token.match(/^(.*)\s+(\d+)(w|x)$/);
-      if (m) return { url: absUrl(m[1].trim()), width: parseInt(m[2], 10), unit: m[3] };
-      // fallback: might be just URL (rare); let width=0
-      return { url: absUrl(token.split(/\s+/)[0]), width: 0, unit: 'w' };
-    });
-    candidates.sort((a,b) => b.width - a.width);
-    return (candidates[0] && candidates[0].url) || img.currentSrc || img.src || null;
-  }
-
-  function isTinyDataURI(url) {
-    // Heuristic: data URI and short length (common for blurred placeholders)
-    return /^data:/.test(url) && url.length < 1024; // 1 KB threshold
-  }
-
-  // Ensure an image element is fully loaded
-
-  function finalizeIfGood(imgEl) {
-    return new Promise((resolve) => {
-      const done = () => resolve(true);
-      if (imgEl.complete && imgEl.naturalWidth > 0) return done();
-      imgEl.addEventListener('load', done, { once: true });
-      imgEl.addEventListener('error', () => resolve(false), { once: true });
+  async function blobToDataURL(blob) {
+    return await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => resolve('');
+      fr.readAsDataURL(blob);
     });
   }
 
-  function stabilityWatcher(targetEl, timeoutMs, onStable) {
-    let timer = null;
-    const mo = new MutationObserver(() => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        mo.disconnect();
-        onStable();
-      }, timeoutMs);
-    });
-    mo.observe(targetEl, { attributes: true, attributeFilter: ['src', 'srcset', 'style', 'class'] });
-    // Kick off timer in case there are no changes after attach
-    timer = setTimeout(() => { mo.disconnect(); onStable(); }, timeoutMs);
+  async function fetchImageAsDataURL(url) {
+    if (!url) return '';
+    if (url.startsWith('data:')) return url;
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) throw new Error('bad status');
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('not image');
+      return await blobToDataURL(blob);
+    } catch (err) {
+      console.warn('[Archiver] failed to inline image', url, err);
+      return '';
+    }
   }
 
-  function processAnchorImg(anchor, img) {
+  async function cloneImageToCache(img, { href = null, wrapIfNoHref = false } = {}) {
+    const src = absUrl(img.currentSrc || img.src || '');
+    if (!src || isTinyDataURI(src)) return false;
+    const dataUrl = await fetchImageAsDataURL(src);
+    if (!dataUrl) return false;
+    ensureCache();
+    const clone = document.createElement('img');
+    clone.src = dataUrl;
+    clone.alt = img.alt || '';
+    clone.loading = 'eager';
+    clone.decoding = 'sync';
+    let node = clone;
+    if (!href && wrapIfNoHref && src) {
+      const a = document.createElement('a');
+      a.href = src;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.appendChild(clone);
+      node = a;
+    }
+    state.cache.appendChild(node);
+    return true;
+  }
+
+  async function cloneVideoToCache(video, { href = null, wrapIfNoHref = false } = {}) {
+    const poster = absUrl(video.poster || '');
+    let dataUrl = poster ? await fetchImageAsDataURL(poster) : '';
+    if (!dataUrl) {
+      const src = absUrl(video.currentSrc || (video.querySelector('source') && video.querySelector('source').src) || '');
+      dataUrl = await fetchImageAsDataURL(src);
+    }
+    if (!dataUrl) return false;
+    ensureCache();
+    const clone = document.createElement('img');
+    clone.src = dataUrl;
+    clone.alt = video.getAttribute('aria-label') || video.getAttribute('title') || '';
+    let node = clone;
+    if (!href && wrapIfNoHref && (poster || video.currentSrc)) {
+      const a = document.createElement('a');
+      a.href = poster || video.currentSrc || '';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.appendChild(clone);
+      node = a;
+    }
+    state.cache.appendChild(node);
+    return true;
+  }
+
+  function keyForMedia(media) {
+    if (!media) return null;
+    if (media.href) return absUrl(media.href);
+    if (media.imgEl) {
+      const src = media.imgEl.currentSrc || media.imgEl.src;
+      if (src) return absUrl(src);
+    }
+    if (media.videoEl) {
+      const src = media.videoEl.poster || media.videoEl.currentSrc || (media.videoEl.querySelector('source') && media.videoEl.querySelector('source').src);
+      if (src) return absUrl(src);
+    }
+    return null;
+  }
+
+  function processCard(card) {
     if (!state.running || state.captured >= state.maxItems) return;
-    const detailUrl = absUrl(anchor.getAttribute('href') || '');
-    if (!detailUrl) return;
+    const adapter = state.adapter || adapterCivitai;
+    const media = adapter.extractMediaFromCard(card);
+    if (!media) return;
+    const key = keyForMedia(media);
+    if (!key || state.items.has(key)) return;
 
-    if (state.seenDetailUrls.has(detailUrl)) return;
-    state.seenDetailUrls.add(detailUrl);
+    state.items.set(key, { type: media.type, status: 'pending' });
     state.seen++;
+    state.deduped = state.items.size;
+    postStats();
 
-    const initialUrl = pickBestFromSrcset(img) || img.src || '';
+    const wrapIfNoHref = !media.href;
+    const href = media.href ? absUrl(media.href) : null;
 
-    // Wait for image attributes to settle before cloning
-    stabilityWatcher(img, state.stabilityTimeout, async () => {
-      if (!state.running || state.captured >= state.maxItems) return;
-      const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
-      if (!bestNow || isTinyDataURI(bestNow)) return;
+    const task = media.type === 'video' && media.videoEl
+      ? cloneVideoToCache(media.videoEl, { href, wrapIfNoHref })
+      : media.imgEl
+        ? cloneImageToCache(media.imgEl, { href, wrapIfNoHref })
+        : Promise.resolve(false);
 
-      const cloneImg = document.createElement('img');
-      cloneImg.src = bestNow;
-      state.bucket.appendChild(cloneImg);
-      const ok = await finalizeIfGood(cloneImg);
-      if (!ok || !state.running) {
-        cloneImg.remove();
+    task.then(ok => {
+      if (!state.running) return;
+      if (!ok) {
+        state.items.delete(key);
+        state.deduped = state.items.size;
+        postStats();
         return;
       }
-
       state.captured++;
-      state.deduped = state.seenDetailUrls.size;
+      state.allImageUrls.add(key);
       state.lastNewItemAt = performance.now();
-      state.allImageUrls.add(absUrl(bestNow));
       postStats();
       postState();
-
       if (state.captured >= state.maxItems) stopRunning(false, false);
+    }).catch(err => {
+      console.warn('[Archiver] failed to clone media', err);
+      state.items.delete(key);
+      state.deduped = state.items.size;
+      postStats();
     });
-
-    postStats();
   }
 
   function scanOnce() {
     if (!state.running || state.captured >= state.maxItems) return;
-    ensureBucket();
-    // IMG-based cards
-    document.querySelectorAll(SEL_ANCHOR_IMG).forEach(img => {
+    ensureCache();
+    const adapter = state.adapter || adapterCivitai;
+    const root = (adapter.getGalleryRoot && adapter.getGalleryRoot()) || document.body;
+    const cards = (adapter.selectCards && adapter.selectCards(root)) || [];
+    cards.forEach(card => {
       if (state.captured >= state.maxItems) return;
-      const a = img.closest('a');
-      if (a) processAnchorImg(a, img);
-    });
-
-    // CSS background-image anchors (fallback)
-    document.querySelectorAll(SEL_ANCHOR_BG).forEach(a => {
-      if (state.captured >= state.maxItems) return;
-      const style = getComputedStyle(a);
-      const bg = style.backgroundImage;
-      if (bg && bg !== 'none') {
-        const m = bg.match(/url\(["']?(.*?)["']?\)/);
-        if (m && m[1]) {
-          const url = absUrl(m[1]);
-          const detailUrl = absUrl(a.getAttribute('href') || '');
-          if (!detailUrl || state.seenDetailUrls.has(detailUrl)) return;
-          if (state.captured >= state.maxItems) return;
-          state.seenDetailUrls.add(detailUrl);
-          state.seen++;
-
-          stabilityWatcher(a, state.stabilityTimeout, async () => {
-            if (!state.running || state.captured >= state.maxItems) return;
-            const cloneImg = document.createElement('img');
-            cloneImg.src = url;
-            state.bucket.appendChild(cloneImg);
-            const ok = await finalizeIfGood(cloneImg);
-            if (!ok || !state.running) {
-              cloneImg.remove();
-              return;
-            }
-            state.captured++;
-            state.deduped = state.seenDetailUrls.size;
-            state.lastNewItemAt = performance.now();
-            state.allImageUrls.add(absUrl(url));
-            postStats();
-            postState();
-            if (state.captured >= state.maxItems) stopRunning(false, false);
-          });
-
-          postStats();
-        }
-      }
+      processCard(card);
     });
   }
 
@@ -220,7 +338,6 @@
       scanOnce();
       if (!state.running) break;
 
-      // If no progress for a while, attempt a small nudge but keep looping
       const now = performance.now();
       if (state.captured > before) {
         state.lastNewItemAt = now;
@@ -246,39 +363,33 @@
   }
 
   function freezePage() {
-    ensureBucket();
-    // In earlier versions we hid the live app and revealed the bucket to create a
-    // static grid for the MHTML export. Now that the browser reliably captures
-    // the full page, keep the app visible and leave the bucket hidden so the
-    // saved archive doesn't include a duplicate grid.
+    ensureCache();
     restoreScrollStyles();
-    // Ensure bucket stays hidden
-    state.bucket.style.display = 'none';
+    if (state.cache) state.cache.style.display = 'none';
   }
 
   async function startRunning() {
     if (state.running) return;
+    state.adapter = ACTIVE_ADAPTER;
     state.running = true;
     state.seen = 0;
     state.captured = 0;
     state.deduped = 0;
-    state.seenDetailUrls.clear();
+    state.items = new Map();
     state.allImageUrls = new Set();
-    // Load options before starting capture
     const opts = await new Promise(resolve => {
-    chrome.storage.local.get({ maxItems: 200, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
+      chrome.storage.local.get({ maxItems: 200, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
     });
     state.maxItems = parseInt(opts.maxItems, 10) || 200;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
-    // Collect any images already on the page
     document.querySelectorAll('img').forEach(img => {
       const url = pickBestFromSrcset(img) || img.currentSrc || img.src;
       if (url) state.allImageUrls.add(absUrl(url));
     });
     postStats();
     postState();
-    ensureBucket();
+    ensureCache();
     startObserver();
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
@@ -304,9 +415,9 @@
       freezePage();
     } else if (restoreStyles) {
       restoreScrollStyles();
-      if (state.bucket) {
-        state.bucket.remove();
-        state.bucket = null;
+      if (state.cache) {
+        state.cache.remove();
+        state.cache = null;
       }
     }
     postState();
@@ -328,56 +439,55 @@
     }
   });
 
-// Save MHTML by clicking a hidden <a download> IN THE PAGE (preserves last-used folder)
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE') {
-    (async () => {
-      try {
-        const { bytes, blobUrl, mime, suggestedName } = msg.payload || {};
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE') {
+      (async () => {
+        try {
+          const { bytes, blobUrl, mime, suggestedName } = msg.payload || {};
 
-        let blob;
-        if (blobUrl) {
-          const res = await fetch(blobUrl);
-          const fetched = await res.blob();
-          const ab = await fetched.arrayBuffer();
-          blob = new Blob([ab], { type: mime || fetched.type || 'application/x-mimearchive' });
-        } else if (bytes instanceof ArrayBuffer) {
-          blob = new Blob([new Uint8Array(bytes)], { type: mime || 'application/x-mimearchive' });
-        } else if (ArrayBuffer.isView(bytes)) {
-          blob = new Blob([new Uint8Array(bytes.buffer)], { type: mime || 'application/x-mimearchive' });
-        } else if (typeof bytes === 'string' && bytes.startsWith('data:')) {
-          const res = await fetch(bytes);
-          blob = await res.blob();
-          if (mime && blob.type !== mime) {
-            blob = new Blob([await blob.arrayBuffer()], { type: mime });
+          let blob;
+          if (blobUrl) {
+            const res = await fetch(blobUrl);
+            const fetched = await res.blob();
+            const ab = await fetched.arrayBuffer();
+            blob = new Blob([ab], { type: mime || fetched.type || 'application/x-mimearchive' });
+          } else if (bytes instanceof ArrayBuffer) {
+            blob = new Blob([new Uint8Array(bytes)], { type: mime || 'application/x-mimearchive' });
+          } else if (ArrayBuffer.isView(bytes)) {
+            blob = new Blob([new Uint8Array(bytes.buffer)], { type: mime || 'application/x-mimearchive' });
+          } else if (typeof bytes === 'string' && bytes.startsWith('data:')) {
+            const res = await fetch(bytes);
+            blob = await res.blob();
+            if (mime && blob.type !== mime) {
+              blob = new Blob([await blob.arrayBuffer()], { type: mime });
+            }
+          } else {
+            console.warn('[Archiver] unexpected bytes payload:', { type: typeof bytes, ctor: bytes?.constructor?.name });
+            blob = new Blob([], { type: mime || 'application/x-mimearchive' });
           }
-        } else {
-          console.warn('[Archiver] unexpected bytes payload:', { type: typeof bytes, ctor: bytes?.constructor?.name });
-          blob = new Blob([], { type: mime || 'application/x-mimearchive' });
+
+          console.log('[Archiver] save blob size:', blob.size, 'type:', blob.type);
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = suggestedName || 'archive.mhtml';
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            try { a.remove(); } catch {}
+            try { URL.revokeObjectURL(url); } catch {}
+          }, 300000);
+          sendResponse({ ok: true });
+        } catch (err) {
+          console.error('[Archiver] in-page save failed:', err);
+          sendResponse({ ok: false, error: String(err?.message || err) });
         }
-
-        console.log('[Archiver] save blob size:', blob.size, 'type:', blob.type);
-
-        const url = URL.createObjectURL(blob);              // page-origin blob URL
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = suggestedName || 'archive.mhtml';      // basename only
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          try { a.remove(); } catch {}
-          try { URL.revokeObjectURL(url); } catch {}
-        }, 300000);
-        sendResponse({ ok: true });
-      } catch (err) {
-        console.error('[Archiver] in-page save failed:', err);
-        sendResponse({ ok: false, error: String(err?.message || err) });
-      }
-    })();
-    return true; // keep the message channel open for sendResponse
-  }
-});
+      })();
+      return true;
+    }
+  });
 
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
