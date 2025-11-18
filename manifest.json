@@ -16,7 +16,8 @@
     "pageCapture"
   ],
   "host_permissions": [
-    "https://civitai.com/*"
+    "https://civitai.com/*",
+    "https://tensor.art/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -60,7 +61,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://civitai.com/*"
+        "https://civitai.com/*",
+        "https://tensor.art/*"
       ],
       "js": [
         "content/archiver.js"

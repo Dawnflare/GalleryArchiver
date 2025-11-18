@@ -1,6 +1,8 @@
 /* Content script: core hoarding, anti-placeholder, auto-scroll, freeze */
 
 (() => {
+  const IS_TENSOR_HOST = /(?:^|\.)tensor\.art$/i.test(location.hostname || '');
+
   const state = {
     running: false,
     seen: 0,
@@ -9,8 +11,8 @@
     maxItems: 200,
     scrollDelay: 300,
     stabilityTimeout: 400,
-    items: new Map(), // key -> { detailUrl, imageUrl, el, state }
-    seenDetailUrls: new Set(), // dedupe by detail link
+    items: new Map(), // key -> { status: 'pending' | 'capturing' | 'captured' }
+    seenDetailUrls: new Set(), // successfully captured detail links
     allImageUrls: new Set(), // every image destined for archive
     observer: null,
     scrollTimer: null,
@@ -20,10 +22,11 @@
     origHtmlStyle: '',
     origBodyStyle: '',
     autoSave: false,
+    bucketStyleBeforeSnapshot: '',
+    snapshotVisible: false,
   };
 
-  const SEL_ANCHOR_IMG = 'a[href*="/images/"] img, a[href^="/images/"] img';
-  const SEL_ANCHOR_BG = 'a[href*="/images/"], a[href^="/images/"]';
+  const SEL_DETAIL_ANCHOR = 'a[href*="/images/"], a[href^="/images/"]';
 
   function absUrl(href) {
     try { return new URL(href, location.origin).toString(); } catch { return href; }
@@ -34,9 +37,70 @@
       const bucket = document.createElement('div');
       bucket.id = 'civitai-archiver-bucket';
       bucket.style.display = 'none';
+      bucket.style.boxSizing = 'border-box';
       document.body.appendChild(bucket);
       state.bucket = bucket;
     }
+  }
+
+  function showSnapshotBucketIfNeeded() {
+    if (!IS_TENSOR_HOST) return;
+    ensureBucket();
+    const bucket = state.bucket;
+    if (!bucket) return;
+    if (!bucket.querySelector('img')) return; // nothing captured yet
+    if (state.snapshotVisible) return;
+
+    state.bucketStyleBeforeSnapshot = bucket.getAttribute('style') || '';
+    bucket.style.display = 'grid';
+    bucket.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
+    bucket.style.gap = '12px';
+    bucket.style.padding = '16px';
+    bucket.style.backgroundColor = '#050505';
+    bucket.style.position = 'relative';
+    bucket.style.width = '100%';
+    bucket.style.maxWidth = '1400px';
+    bucket.style.margin = '0 auto';
+    bucket.style.zIndex = '2147483000';
+
+    if (!bucket.querySelector('[data-archiver-snapshot-heading]')) {
+      const heading = document.createElement('div');
+      heading.dataset.archiverSnapshotHeading = '1';
+      heading.textContent = 'Gallery Archiver Snapshot';
+      heading.style.gridColumn = '1 / -1';
+      heading.style.fontSize = '1.25rem';
+      heading.style.fontWeight = '600';
+      heading.style.color = '#fff';
+      heading.style.paddingBottom = '8px';
+      heading.style.textAlign = 'center';
+      bucket.prepend(heading);
+    }
+
+    bucket.querySelectorAll('img').forEach(img => {
+      img.style.width = '100%';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '6px';
+      img.loading = 'lazy';
+    });
+
+    state.snapshotVisible = true;
+  }
+
+  function hideSnapshotBucket() {
+    if (!state.bucket || !state.snapshotVisible) return;
+    if (state.bucketStyleBeforeSnapshot) {
+      state.bucket.setAttribute('style', state.bucketStyleBeforeSnapshot);
+    } else {
+      state.bucket.removeAttribute('style');
+    }
+    // ensure default hidden style comes back
+    state.bucket.style.display = 'none';
+    state.bucket.style.boxSizing = 'border-box';
+    const heading = state.bucket.querySelector('[data-archiver-snapshot-heading]');
+    if (heading) heading.remove();
+    state.snapshotVisible = false;
   }
 
   function postStats() {
@@ -102,22 +166,85 @@
     timer = setTimeout(() => { mo.disconnect(); onStable(); }, timeoutMs);
   }
 
+  function getBackgroundImageUrl(el) {
+    if (!el || !el.ownerDocument) return '';
+    try {
+      const style = getComputedStyle(el);
+      if (!style) return '';
+      const bg = style.backgroundImage;
+      if (!bg || bg === 'none' || !bg.includes('url')) return '';
+      const match = bg.match(/url\(("|')?(.*?)("|')?\)/i);
+      if (!match || !match[2]) return '';
+      const raw = match[2].trim();
+      if (!raw || raw === 'none') return '';
+      return absUrl(raw);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function findBackgroundImageElement(anchor) {
+    const queue = [anchor];
+    const seen = new Set();
+    const LIMIT = 60;
+    while (queue.length && seen.size < LIMIT) {
+      const el = queue.shift();
+      if (!el || seen.has(el)) continue;
+      seen.add(el);
+      const url = getBackgroundImageUrl(el);
+      if (url && !isTinyDataURI(url)) {
+        return { el, url };
+      }
+      Array.from(el.children).forEach(child => queue.push(child));
+    }
+    return null;
+  }
+
+  function markSeen(detailUrl) {
+    if (!detailUrl) return null;
+    let item = state.items.get(detailUrl);
+    if (!item) {
+      item = { status: 'pending' };
+      state.items.set(detailUrl, item);
+      state.seen++;
+      postStats();
+    }
+    return item;
+  }
+
+  function recordCapture(detailUrl) {
+    if (!detailUrl) return;
+    state.seenDetailUrls.add(detailUrl);
+    state.deduped = state.seenDetailUrls.size;
+  }
+
   function processAnchorImg(anchor, img) {
     if (!state.running || state.captured >= state.maxItems) return;
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
     if (!detailUrl) return;
 
-    if (state.seenDetailUrls.has(detailUrl)) return;
-    state.seenDetailUrls.add(detailUrl);
-    state.seen++;
+    const item = markSeen(detailUrl);
+    if (!item) return;
+    if (item.status === 'capturing' || item.status === 'captured') return;
 
     const initialUrl = pickBestFromSrcset(img) || img.src || '';
+    if (!initialUrl || isTinyDataURI(initialUrl)) {
+      item.status = 'pending';
+      return;
+    }
 
+    item.status = 'capturing';
     // Wait for image attributes to settle before cloning
     stabilityWatcher(img, state.stabilityTimeout, async () => {
-      if (!state.running || state.captured >= state.maxItems) return;
+      if (!state.running || state.captured >= state.maxItems) {
+        item.status = item.status === 'capturing' ? 'pending' : item.status;
+        return;
+      }
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
-      if (!bestNow || isTinyDataURI(bestNow)) return;
+      if (!bestNow || isTinyDataURI(bestNow)) {
+        item.status = 'pending';
+        return;
+      }
 
       const cloneImg = document.createElement('img');
       cloneImg.src = bestNow;
@@ -125,11 +252,68 @@
       const ok = await finalizeIfGood(cloneImg);
       if (!ok || !state.running) {
         cloneImg.remove();
+        item.status = 'pending';
         return;
       }
 
+      recordCapture(detailUrl);
+      item.status = 'captured';
       state.captured++;
-      state.deduped = state.seenDetailUrls.size;
+      state.lastNewItemAt = performance.now();
+      state.allImageUrls.add(absUrl(bestNow));
+      postStats();
+      postState();
+
+      if (state.captured >= state.maxItems) stopRunning(false, false);
+    });
+
+    postStats();
+  }
+
+  function processAnchorBackground(anchor) {
+    if (!state.running || state.captured >= state.maxItems) return;
+    const detailUrl = absUrl(anchor.getAttribute('href') || '');
+    if (!detailUrl) return;
+
+    const item = markSeen(detailUrl);
+    if (!item) return;
+    if (item.status === 'capturing' || item.status === 'captured') return;
+
+    const found = findBackgroundImageElement(anchor);
+    if (!found || !found.url || isTinyDataURI(found.url)) {
+      item.status = 'pending';
+      postStats();
+      return;
+    }
+
+    const targetEl = found.el;
+    const initialUrl = found.url;
+    item.status = 'capturing';
+
+    stabilityWatcher(targetEl, state.stabilityTimeout, async () => {
+      if (!state.running || state.captured >= state.maxItems) {
+        item.status = item.status === 'capturing' ? 'pending' : item.status;
+        return;
+      }
+      const bestNow = getBackgroundImageUrl(targetEl) || initialUrl;
+      if (!bestNow || isTinyDataURI(bestNow)) {
+        item.status = 'pending';
+        return;
+      }
+
+      const cloneImg = document.createElement('img');
+      cloneImg.src = bestNow;
+      state.bucket.appendChild(cloneImg);
+      const ok = await finalizeIfGood(cloneImg);
+      if (!ok || !state.running) {
+        cloneImg.remove();
+        item.status = 'pending';
+        return;
+      }
+
+      recordCapture(detailUrl);
+      item.status = 'captured';
+      state.captured++;
       state.lastNewItemAt = performance.now();
       state.allImageUrls.add(absUrl(bestNow));
       postStats();
@@ -144,49 +328,13 @@
   function scanOnce() {
     if (!state.running || state.captured >= state.maxItems) return;
     ensureBucket();
-    // IMG-based cards
-    document.querySelectorAll(SEL_ANCHOR_IMG).forEach(img => {
+    document.querySelectorAll(SEL_DETAIL_ANCHOR).forEach(anchor => {
       if (state.captured >= state.maxItems) return;
-      const a = img.closest('a');
-      if (a) processAnchorImg(a, img);
-    });
-
-    // CSS background-image anchors (fallback)
-    document.querySelectorAll(SEL_ANCHOR_BG).forEach(a => {
-      if (state.captured >= state.maxItems) return;
-      const style = getComputedStyle(a);
-      const bg = style.backgroundImage;
-      if (bg && bg !== 'none') {
-        const m = bg.match(/url\(["']?(.*?)["']?\)/);
-        if (m && m[1]) {
-          const url = absUrl(m[1]);
-          const detailUrl = absUrl(a.getAttribute('href') || '');
-          if (!detailUrl || state.seenDetailUrls.has(detailUrl)) return;
-          if (state.captured >= state.maxItems) return;
-          state.seenDetailUrls.add(detailUrl);
-          state.seen++;
-
-          stabilityWatcher(a, state.stabilityTimeout, async () => {
-            if (!state.running || state.captured >= state.maxItems) return;
-            const cloneImg = document.createElement('img');
-            cloneImg.src = url;
-            state.bucket.appendChild(cloneImg);
-            const ok = await finalizeIfGood(cloneImg);
-            if (!ok || !state.running) {
-              cloneImg.remove();
-              return;
-            }
-            state.captured++;
-            state.deduped = state.seenDetailUrls.size;
-            state.lastNewItemAt = performance.now();
-            state.allImageUrls.add(absUrl(url));
-            postStats();
-            postState();
-            if (state.captured >= state.maxItems) stopRunning(false, false);
-          });
-
-          postStats();
-        }
+      const img = anchor.querySelector('img');
+      if (img) {
+        processAnchorImg(anchor, img);
+      } else {
+        processAnchorBackground(anchor);
       }
     });
   }
@@ -262,6 +410,7 @@
     state.seen = 0;
     state.captured = 0;
     state.deduped = 0;
+    state.items = new Map();
     state.seenDetailUrls.clear();
     state.allImageUrls = new Set();
     // Load options before starting capture
@@ -291,6 +440,7 @@
 
   function stopRunning(freeze=false, restoreStyles=true) {
     state.running = false;
+    hideSnapshotBucket();
     if (state.observer) {
       state.observer.disconnect();
       state.observer = null;
@@ -612,6 +762,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
+          showSnapshotBucketIfNeeded();
           const s1 = await freezeVideosInPlace();
           const s2 = await freezeStandaloneVideos();
           const stats = {
