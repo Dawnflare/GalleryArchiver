@@ -7,20 +7,26 @@
     try { return new URL(href, location.origin).toString(); } catch { return href || ''; }
   }
 
-  function pickBestFromSrcset(img) {
-    const ss = img.getAttribute('srcset');
-    if (!ss) return img.currentSrc || img.src || null;
-    const candidates = ss.split(',').map(s => s.trim()).map(token => {
+  function srcsetUrls(img) {
+    const ss = img && img.getAttribute && img.getAttribute('srcset');
+    if (!ss) return [];
+    const parsed = ss.split(',').map(s => s.trim()).map(token => {
       const m = token.match(/^(.*)\s+(\d+)(w|x)$/);
-      if (m) return { url: absUrl(m[1].trim()), width: parseInt(m[2], 10), unit: m[3] };
-      return { url: absUrl(token.split(/\s+/)[0]), width: 0, unit: 'w' };
+      if (m) return { url: absUrl(m[1].trim()), width: parseInt(m[2], 10) };
+      return { url: absUrl(token.split(/\s+/)[0]), width: 0 };
     });
-    candidates.sort((a, b) => b.width - a.width);
-    return (candidates[0] && candidates[0].url) || img.currentSrc || img.src || null;
+    parsed.sort((a, b) => b.width - a.width);
+    return parsed.map(item => item.url).filter(Boolean);
   }
 
-  function resolveImageUrl(img) {
-    if (!img) return '';
+  function pickBestFromSrcset(img) {
+    const urls = srcsetUrls(img);
+    if (urls.length) return urls[0];
+    return (img && (img.currentSrc || img.src)) || null;
+  }
+
+  function resolveImageUrlCandidates(img) {
+    if (!img) return [];
     const candidates = [];
     const seen = new Set();
     const push = (url) => {
@@ -31,9 +37,9 @@
       candidates.push(resolved);
     };
 
-    push(pickBestFromSrcset(img));
     push(img.currentSrc);
-    push(img.getAttribute('src'));
+    if (img.getAttribute) push(img.getAttribute('src'));
+    srcsetUrls(img).forEach(push);
 
     const dataAttrs = [
       'data-src',
@@ -48,9 +54,9 @@
       'data-img',
       'data-href',
     ];
-    dataAttrs.forEach(name => push(img.getAttribute(name)));
+    dataAttrs.forEach(name => push(img.getAttribute && img.getAttribute(name)));
 
-    Array.from(img.attributes || []).forEach(attr => {
+    Array.from((img && img.attributes) || []).forEach(attr => {
       if (/^data-(?:src|url)/i.test(attr.name)) push(attr.value);
     });
 
@@ -60,7 +66,12 @@
       if (m) push(m[1]);
     }
 
-    return candidates[0] || '';
+    return candidates;
+  }
+
+  function resolveImageUrl(img) {
+    const [first] = resolveImageUrlCandidates(img);
+    return first || '';
   }
 
   function isTinyDataURI(url) {
@@ -276,10 +287,21 @@
     }
   }
 
+  async function inlineFromCandidates(candidates) {
+    for (const src of candidates || []) {
+      if (!src || isTinyDataURI(src)) continue;
+      const dataUrl = await fetchImageAsDataURL(src);
+      if (dataUrl) {
+        return { dataUrl, resolvedSrc: src };
+      }
+    }
+    return { dataUrl: '', resolvedSrc: '' };
+  }
+
   async function cloneImageToCache(img, { href = null, wrapIfNoHref = false } = {}) {
-    const src = resolveImageUrl(img);
-    if (!src || isTinyDataURI(src)) return false;
-    const dataUrl = await fetchImageAsDataURL(src);
+    const candidates = resolveImageUrlCandidates(img);
+    if (!candidates.length) return false;
+    const { dataUrl, resolvedSrc } = await inlineFromCandidates(candidates);
     if (!dataUrl) return false;
     ensureCache();
     const clone = document.createElement('img');
@@ -288,9 +310,10 @@
     clone.loading = 'eager';
     clone.decoding = 'sync';
     let node = clone;
-    if (!href && wrapIfNoHref && src) {
+    const linkHref = href || resolvedSrc || '';
+    if (!href && wrapIfNoHref && linkHref) {
       const a = document.createElement('a');
-      a.href = src;
+      a.href = linkHref;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.appendChild(clone);
@@ -302,20 +325,18 @@
 
   async function cloneVideoToCache(video, { href = null, wrapIfNoHref = false } = {}) {
     const poster = absUrl(video.poster || '');
-    let dataUrl = poster ? await fetchImageAsDataURL(poster) : '';
-    if (!dataUrl) {
-      const src = absUrl(video.currentSrc || (video.querySelector('source') && video.querySelector('source').src) || '');
-      dataUrl = await fetchImageAsDataURL(src);
-    }
+    const src = absUrl(video.currentSrc || (video.querySelector('source') && video.querySelector('source').src) || '');
+    const { dataUrl, resolvedSrc } = await inlineFromCandidates([poster, src]);
     if (!dataUrl) return false;
     ensureCache();
     const clone = document.createElement('img');
     clone.src = dataUrl;
     clone.alt = video.getAttribute('aria-label') || video.getAttribute('title') || '';
     let node = clone;
-    if (!href && wrapIfNoHref && (poster || video.currentSrc)) {
+    const linkHref = href || resolvedSrc || poster || src || '';
+    if (!href && wrapIfNoHref && linkHref) {
       const a = document.createElement('a');
-      a.href = poster || video.currentSrc || '';
+      a.href = linkHref;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.appendChild(clone);
@@ -471,7 +492,7 @@
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
     document.querySelectorAll('img').forEach(img => {
       const url = resolveImageUrl(img);
-      if (url) state.allImageUrls.add(url);
+      if (url) state.allImageUrls.add(absUrl(url));
     });
     postStats();
     postState();
@@ -580,7 +601,7 @@
     window.__civitaiArchiverStop = () => stopRunning(true);
 
     if (typeof module !== 'undefined' && module.exports) {
-      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI };
+      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI, resolveImageUrl };
     }
   })();
 
