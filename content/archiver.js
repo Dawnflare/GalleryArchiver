@@ -19,6 +19,50 @@
     return (candidates[0] && candidates[0].url) || img.currentSrc || img.src || null;
   }
 
+  function resolveImageUrl(img) {
+    if (!img) return '';
+    const candidates = [];
+    const seen = new Set();
+    const push = (url) => {
+      if (!url) return;
+      const resolved = absUrl(url);
+      if (!resolved || seen.has(resolved) || isTinyDataURI(resolved)) return;
+      seen.add(resolved);
+      candidates.push(resolved);
+    };
+
+    push(pickBestFromSrcset(img));
+    push(img.currentSrc);
+    push(img.getAttribute('src'));
+
+    const dataAttrs = [
+      'data-src',
+      'data-srcset',
+      'data-original-src',
+      'data-original',
+      'data-url',
+      'data-image-url',
+      'data-full',
+      'data-fullsrc',
+      'data-img-src',
+      'data-img',
+      'data-href',
+    ];
+    dataAttrs.forEach(name => push(img.getAttribute(name)));
+
+    Array.from(img.attributes || []).forEach(attr => {
+      if (/^data-(?:src|url)/i.test(attr.name)) push(attr.value);
+    });
+
+    const bg = img.style && img.style.backgroundImage;
+    if (bg) {
+      const m = bg.match(/url\(["']?(.*?)["']?\)/);
+      if (m) push(m[1]);
+    }
+
+    return candidates[0] || '';
+  }
+
   function isTinyDataURI(url) {
     return /^data:/.test(url || '') && (url || '').length < 1024;
   }
@@ -191,7 +235,7 @@
   }
 
   async function cloneImageToCache(img, { href = null, wrapIfNoHref = false } = {}) {
-    const src = absUrl(img.currentSrc || img.src || '');
+    const src = resolveImageUrl(img);
     if (!src || isTinyDataURI(src)) return false;
     const dataUrl = await fetchImageAsDataURL(src);
     if (!dataUrl) return false;
@@ -243,8 +287,8 @@
     if (!media) return null;
     if (media.href) return absUrl(media.href);
     if (media.imgEl) {
-      const src = media.imgEl.currentSrc || media.imgEl.src;
-      if (src) return absUrl(src);
+      const src = resolveImageUrl(media.imgEl);
+      if (src) return src;
     }
     if (media.videoEl) {
       const src = media.videoEl.poster || media.videoEl.currentSrc || (media.videoEl.querySelector('source') && media.videoEl.querySelector('source').src);
@@ -384,8 +428,8 @@
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
     document.querySelectorAll('img').forEach(img => {
-      const url = pickBestFromSrcset(img) || img.currentSrc || img.src;
-      if (url) state.allImageUrls.add(absUrl(url));
+      const url = resolveImageUrl(img);
+      if (url) state.allImageUrls.add(url);
     });
     postStats();
     postState();
