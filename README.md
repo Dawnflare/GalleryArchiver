@@ -15,7 +15,7 @@ Brave/Chromium extension that hoards infinite‑scroll galleries and saves them 
 ## Install (dev)
 1. Open Brave → `brave://extensions/` and enable **Developer mode** (top‑right).
 2. Click **Load unpacked** and select this folder (`GalleryArchiver/`).
-3. Pin the extension, open a gallery page (e.g. on Civitai), and use the popup controls.
+3. Pin the extension, open a gallery page (e.g. on Civitai.com or Civitai.red), and use the popup controls.
 
 ## Notes
 - Works best when you save immediately after stopping.
