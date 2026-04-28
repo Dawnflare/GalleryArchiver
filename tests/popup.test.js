@@ -22,7 +22,9 @@ global.URL.revokeObjectURL = jest.fn();
 global.chrome = {
   tabs: {
     query: jest.fn(() => Promise.resolve([{ id: 123, title: 'My Tab', url: 'https://example.com/page' }])),
-    sendMessage: jest.fn(),
+    sendMessage: jest.fn((id, msg) => (
+      msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE' ? Promise.resolve({ ok: true }) : Promise.resolve()
+    )),
     reload: jest.fn()
   },
   pageCapture: { saveAsMHTML: jest.fn(() => Promise.resolve(new Blob(['test'], { type: 'text/plain' }))) },
@@ -48,6 +50,9 @@ test('save button triggers page capture and download', async () => {
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 123 });
+  const prepareMsgCall = chrome.tabs.sendMessage.mock.calls.find(([, msg]) => msg.type === 'ARCHIVER_PREPARE_FOR_SAVE');
+  expect(prepareMsgCall).toBeTruthy();
+  expect(prepareMsgCall[0]).toBe(123);
   // ensure we wrap the captured data with the correct MIME type
   const blobArg = global.URL.createObjectURL.mock.calls[0][0];
   expect(blobArg.type).toBe('application/x-mimearchive');
@@ -127,6 +132,10 @@ test('saveAllTabs button triggers save for each tab', async () => {
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(2);
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenNthCalledWith(1, { tabId: 1 });
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenNthCalledWith(2, { tabId: 2 });
+  const prepareCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_PREPARE_FOR_SAVE');
+  expect(prepareCalls.length).toBe(2);
+  expect(prepareCalls[0][0]).toBe(1);
+  expect(prepareCalls[1][0]).toBe(2);
   const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
   expect(saveCalls.length).toBe(2);
   expect(saveCalls[0][0]).toBe(1);
@@ -149,6 +158,9 @@ test('saveAllTabs skips tabs without permissions', async () => {
   await new Promise(r => setTimeout(r, 300));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(1);
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 1 });
+  const prepareCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_PREPARE_FOR_SAVE');
+  expect(prepareCalls.length).toBe(1);
+  expect(prepareCalls[0][0]).toBe(1);
   const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
   expect(saveCalls.length).toBe(1);
   expect(saveCalls[0][0]).toBe(1);
@@ -168,6 +180,9 @@ test('saveAllTabs skips tabs with unsupported URLs', async () => {
   await new Promise(r => setTimeout(r, 300));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledTimes(1);
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalledWith({ tabId: 2 });
+  const prepareCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_PREPARE_FOR_SAVE');
+  expect(prepareCalls.length).toBe(1);
+  expect(prepareCalls[0][0]).toBe(2);
   const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
   expect(saveCalls.length).toBe(1);
   expect(saveCalls[0][0]).toBe(2);
