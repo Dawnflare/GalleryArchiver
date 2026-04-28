@@ -23,7 +23,9 @@ global.chrome = {
   tabs: {
     query: jest.fn(() => Promise.resolve([{ id: 123, title: 'My Tab', url: 'https://example.com/page' }])),
     sendMessage: jest.fn((id, msg) => (
-      msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE' ? Promise.resolve({ ok: true }) : Promise.resolve()
+      msg?.type === 'ARCHIVER_PREPARE_FOR_SAVE' ? Promise.resolve({ ok: true }) :
+      msg?.type === 'ARCHIVER_RETURN_TO_TOP' ? Promise.resolve({ ok: true, scrolledTargets: 2 }) :
+      Promise.resolve()
     )),
     reload: jest.fn()
   },
@@ -61,6 +63,11 @@ test('save button triggers page capture and download', async () => {
   expect(saveMsgCall[0]).toBe(123);
   expect(saveMsgCall[1].payload.blobUrl).toBe('blob:fake');
   expect(saveMsgCall[1].payload.mime).toBe('application/x-mimearchive');
+  const stopCallIndex = chrome.tabs.sendMessage.mock.calls.findIndex(([, msg]) => msg.type === 'ARCHIVER_STOP');
+  const topCallIndex = chrome.tabs.sendMessage.mock.calls.findIndex(([, msg]) => msg.type === 'ARCHIVER_RETURN_TO_TOP');
+  expect(stopCallIndex).toBeGreaterThan(-1);
+  expect(topCallIndex).toBeGreaterThan(stopCallIndex);
+  expect(chrome.tabs.sendMessage.mock.calls[topCallIndex][0]).toBe(123);
   expect(chrome.downloads.download).toHaveBeenCalled();
   const fname = chrome.downloads.download.mock.calls[0][0].filename;
   expect(fname.startsWith('My_Tab_')).toBe(true);
@@ -68,6 +75,7 @@ test('save button triggers page capture and download', async () => {
 });
 
 test('handles ARCHIVER_POPUP_SAVE message', async () => {
+  chrome.tabs.sendMessage.mockClear();
   const listener = chrome.runtime.onMessage.addListener.mock.calls[0][0];
   const resP = new Promise((resolve) => listener({ type: 'ARCHIVER_POPUP_SAVE' }, {}, resolve));
   await Promise.resolve();
@@ -75,6 +83,9 @@ test('handles ARCHIVER_POPUP_SAVE message', async () => {
   await Promise.resolve();
   await new Promise(r => setTimeout(r, 150));
   expect(chrome.pageCapture.saveAsMHTML).toHaveBeenCalled();
+  const topCall = chrome.tabs.sendMessage.mock.calls.find(([, msg]) => msg.type === 'ARCHIVER_RETURN_TO_TOP');
+  expect(topCall).toBeTruthy();
+  expect(topCall[0]).toBe(123);
   const res = await resP;
   expect(res.ok).toBe(true);
 });
@@ -140,6 +151,10 @@ test('saveAllTabs button triggers save for each tab', async () => {
   expect(saveCalls.length).toBe(2);
   expect(saveCalls[0][0]).toBe(1);
   expect(saveCalls[1][0]).toBe(2);
+  const topCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_RETURN_TO_TOP');
+  expect(topCalls.length).toBe(2);
+  expect(topCalls[0][0]).toBe(1);
+  expect(topCalls[1][0]).toBe(2);
 });
 
 test('saveAllTabs skips tabs without permissions', async () => {
@@ -164,6 +179,9 @@ test('saveAllTabs skips tabs without permissions', async () => {
   const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
   expect(saveCalls.length).toBe(1);
   expect(saveCalls[0][0]).toBe(1);
+  const topCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_RETURN_TO_TOP');
+  expect(topCalls.length).toBe(1);
+  expect(topCalls[0][0]).toBe(1);
 });
 
 test('saveAllTabs skips tabs with unsupported URLs', async () => {
@@ -186,6 +204,9 @@ test('saveAllTabs skips tabs with unsupported URLs', async () => {
   const saveCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_SAVE_MHTML_VIA_PAGE');
   expect(saveCalls.length).toBe(1);
   expect(saveCalls[0][0]).toBe(2);
+  const topCalls = chrome.tabs.sendMessage.mock.calls.filter(([, msg]) => msg.type === 'ARCHIVER_RETURN_TO_TOP');
+  expect(topCalls.length).toBe(1);
+  expect(topCalls[0][0]).toBe(2);
 });
 
 test('handles ARCHIVER_POPUP_SAVE_ALL_TABS message', async () => {

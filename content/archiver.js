@@ -316,12 +316,84 @@
     state.autoSave = false;
   }
 
+  function scrollElementToTop(el) {
+    if (!el) return false;
+    let didScroll = false;
+
+    try {
+      if (typeof el.scrollTo === 'function') {
+        el.scrollTo(0, 0);
+        didScroll = true;
+      }
+    } catch (_) {}
+
+    try {
+      el.scrollTop = 0;
+      el.scrollLeft = 0;
+      didScroll = true;
+    } catch (_) {}
+
+    return didScroll;
+  }
+
+  function scrollLivePageTargetsToTop() {
+    const targets = new Set([
+      state.scrollEl,
+      document.scrollingElement,
+      document.documentElement,
+      document.body,
+      document.getElementById('__next'),
+      document.getElementById('app'),
+      document.getElementById('main'),
+      document.querySelector('main')
+    ].filter(Boolean));
+
+    document.querySelectorAll('.scroll-area, .mantine-ScrollArea-viewport, [data-radix-scroll-area-viewport]')
+      .forEach(el => targets.add(el));
+
+    const activeScroller = document.activeElement?.closest?.(
+      '.scroll-area, .mantine-ScrollArea-viewport, [data-radix-scroll-area-viewport], main, #__next, #app, #main'
+    );
+    if (activeScroller) targets.add(activeScroller);
+
+    let scrolledTargets = 0;
+    targets.forEach(el => {
+      if (scrollElementToTop(el)) scrolledTargets++;
+    });
+
+    try {
+      if (typeof window.scrollTo === 'function') {
+        window.scrollTo(0, 0);
+      }
+    } catch (_) {}
+
+    return scrolledTargets;
+  }
+
+  async function returnLivePageViewToTop() {
+    let scrolledTargets = scrollLivePageTargetsToTop();
+
+    await new Promise(resolve => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resolve);
+      else setTimeout(resolve, 16);
+    });
+
+    scrolledTargets += scrollLivePageTargetsToTop();
+    return { scrolledTargets };
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'ARCHIVER_START') {
       state.autoSave = !!msg.autoSave;
       startRunning();
     }
     if (msg?.type === 'ARCHIVER_STOP') stopRunning(true);
+    if (msg?.type === 'ARCHIVER_RETURN_TO_TOP') {
+      returnLivePageViewToTop()
+        .then(result => sendResponse({ ok: true, ...result }))
+        .catch(err => sendResponse({ ok: false, error: String(err?.message || err) }));
+      return true;
+    }
     if (msg?.type === 'ARCHIVER_RESET') {
       stopRunning(false);
       sendResponse();
@@ -382,9 +454,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // Dev helper (console): window.__civitaiArchiverStart()
     window.__civitaiArchiverStart = startRunning;
     window.__civitaiArchiverStop = () => stopRunning(true);
+    window.__archiverReturnToTop = returnLivePageViewToTop;
 
     if (typeof module !== 'undefined' && module.exports) {
-      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI };
+      module.exports = { absUrl, pickBestFromSrcset, isTinyDataURI, returnLivePageViewToTop };
     }
   })();
 

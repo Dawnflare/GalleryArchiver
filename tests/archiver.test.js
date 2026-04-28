@@ -1,6 +1,6 @@
 const path = require('path');
 
-let absUrl, pickBestFromSrcset, isTinyDataURI;
+let absUrl, pickBestFromSrcset, isTinyDataURI, returnLivePageViewToTop;
 
 beforeAll(() => {
   global.chrome = {
@@ -10,7 +10,7 @@ beforeAll(() => {
     },
     storage: { local: { get: jest.fn() } },
   };
-  ({ absUrl, pickBestFromSrcset, isTinyDataURI } = require('../content/archiver.js'));
+  ({ absUrl, pickBestFromSrcset, isTinyDataURI, returnLivePageViewToTop } = require('../content/archiver.js'));
 });
 
 describe('archiver utility functions', () => {
@@ -31,6 +31,36 @@ describe('archiver utility functions', () => {
     expect(isTinyDataURI(tiny)).toBe(true);
     const large = 'data:image/png;base64,' + Buffer.from('a'.repeat(2000)).toString('base64');
     expect(isTinyDataURI(large)).toBe(false);
+  });
+
+  test('returnLivePageViewToTop scrolls the live page viewport to the top', async () => {
+    document.body.innerHTML = `
+      <div class="scroll-area">
+        <main style="height: 3000px"></main>
+      </div>
+    `;
+
+    const originalWindowScrollTo = window.scrollTo;
+    window.scrollTo = jest.fn();
+
+    const scrollArea = document.querySelector('.scroll-area');
+    scrollArea.scrollTop = 640;
+    scrollArea.scrollLeft = 20;
+    document.documentElement.scrollTop = 320;
+    document.body.scrollTop = 160;
+
+    try {
+      const result = await returnLivePageViewToTop();
+
+      expect(scrollArea.scrollTop).toBe(0);
+      expect(scrollArea.scrollLeft).toBe(0);
+      expect(document.documentElement.scrollTop).toBe(0);
+      expect(document.body.scrollTop).toBe(0);
+      expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+      expect(result.scrolledTargets).toBeGreaterThan(0);
+    } finally {
+      window.scrollTo = originalWindowScrollTo;
+    }
   });
 
   test('MHTML layout prep hides image reaction overlays', async () => {
