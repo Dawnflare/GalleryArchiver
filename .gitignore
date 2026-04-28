@@ -1,4 +1,6 @@
 node_modules/
+.npm-cache/
+Temp/
 dist/
 *.zip
 .DS_Store

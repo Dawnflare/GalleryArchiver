@@ -601,7 +601,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return { processed, ok, fail, skipped, total: vids.length };
   }
 
-  // Message hook: popup will ask us to prepare the DOM before saving
+  async function prepareForSave() {
+    const s1 = await freezeVideosInPlace();
+    const s2 = await freezeStandaloneVideos();
+    const videos = {
+      processed: (s1.processed || 0) + (s2.processed || 0),
+      ok:        (s1.ok || 0) + (s2.ok || 0),
+      fail:      (s1.fail || 0) + (s2.fail || 0),
+      skipped:   (s1.skipped || 0) + (s2.skipped || 0),
+      total:     (s1.total || 0) + (s2.total || 0),
+    };
+
+    const gallery = await window.__archiverPrepareGallery?.prepare?.();
+    const layout = await window.__archiverPrepareLayout?.prepare?.();
+    const overlays = await window.__archiverPrepareOverlays?.prepare?.();
+
+    await new Promise(resolve => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resolve);
+      else setTimeout(resolve, 16);
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    return { videos, gallery, layout, overlays };
+  }
+
+  // Message hook: popup will ask us to prepare the DOM before saving.
+  // This is the only ARCHIVER_PREPARE_FOR_SAVE responder in the content script.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg) return;
     if (msg.type === 'ARCHIVER_HAS_UNFROZEN_VIDEOS') {
@@ -612,15 +637,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
       (async () => {
         try {
-          const s1 = await freezeVideosInPlace();
-          const s2 = await freezeStandaloneVideos();
-          const stats = {
-            processed: (s1.processed || 0) + (s2.processed || 0),
-            ok:        (s1.ok || 0) + (s2.ok || 0),
-            fail:      (s1.fail || 0) + (s2.fail || 0),
-            skipped:   (s1.skipped || 0) + (s2.skipped || 0),
-            total:     (s1.total || 0) + (s2.total || 0),
-          };
+          const stats = await prepareForSave();
           sendResponse({ ok: true, stats });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
@@ -635,6 +652,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports.freezeStandaloneVideos = freezeStandaloneVideos;
+    module.exports.prepareForSave = prepareForSave;
   }
 })();
 
@@ -704,26 +722,392 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (s1) s1.remove();
   }
 
+  async function prepare() {
+    const root = getGalleryRoot();
+    ensureGridStyles(root);
+    await new Promise(r => setTimeout(r, 30));
+    return { gridStyle: Boolean(document.getElementById(STYLE_ID_GRID)), hasGallery: Boolean(root) };
+  }
+
+  window.__archiverPrepareGallery = { prepare, cleanup };
+
   /* ------------------------- Message integration ------------------------- */
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
-    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
-      (async () => {
-        try {
-          const root = getGalleryRoot();
-          ensureGridStyles(root);
-          await new Promise(r => setTimeout(r, 30));
-        } catch (_) {
-          /* ignore */
-        }
-      })();
-    }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanup();
     }
   });
 
   // Safety: restore on navigation
+  window.addEventListener('beforeunload', cleanup, { once: true });
+})();
+
+/* ------------------------------------------------------------------
+ * [Archiver] MHTML static layout preparation
+ *  - Chrome's MHTML viewer can lose Civitai's container-query layout.
+ *  - Archive mode makes the app shell a normal vertical document flow.
+ *  - Styles are reversible on the live page, but persist in the snapshot.
+ * ------------------------------------------------------------------ */
+(function () {
+  const STYLE_ID_LAYOUT = 'archiver-mhtml-layout-fix';
+  const ATTR_PREP = 'data-archiver-mhtml-prep';
+  const ATTR_ORIGINAL_STYLE = 'data-archiver-original-style';
+
+  function rememberStyle(el) {
+    if (!el || el.hasAttribute(ATTR_ORIGINAL_STYLE)) return;
+    el.setAttribute(ATTR_ORIGINAL_STYLE, el.getAttribute('style') || '');
+  }
+
+  function setImportant(el, prop, value) {
+    if (!el || !el.style) return;
+    rememberStyle(el);
+    el.style.setProperty(prop, value, 'important');
+  }
+
+  function $$(sel, root = document) {
+    return Array.from(root.querySelectorAll(sel));
+  }
+
+  function ensureLayoutStyle() {
+    if (document.getElementById(STYLE_ID_LAYOUT)) return;
+
+    const s = document.createElement('style');
+    s.id = STYLE_ID_LAYOUT;
+    s.textContent = `
+      html[${ATTR_PREP}="1"],
+      html[${ATTR_PREP}="1"] body,
+      html[${ATTR_PREP}="1"] #__next,
+      html[${ATTR_PREP}="1"] #main,
+      html[${ATTR_PREP}="1"] #__next > .flex,
+      html[${ATTR_PREP}="1"] #main > .flex,
+      html[${ATTR_PREP}="1"] #main > .flex > .flex,
+      html[${ATTR_PREP}="1"] .scroll-area,
+      html[${ATTR_PREP}="1"] main {
+        box-sizing: border-box !important;
+        columns: auto !important;
+        contain: none !important;
+        container-type: normal !important;
+        height: auto !important;
+        max-height: none !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        transform: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      html[${ATTR_PREP}="1"] #__next,
+      html[${ATTR_PREP}="1"] #__next > .flex,
+      html[${ATTR_PREP}="1"] #main,
+      html[${ATTR_PREP}="1"] #main > .flex,
+      html[${ATTR_PREP}="1"] #main > .flex > .flex,
+      html[${ATTR_PREP}="1"] .scroll-area,
+      html[${ATTR_PREP}="1"] main {
+        align-items: stretch !important;
+        display: flex !important;
+        flex-flow: column nowrap !important;
+        justify-content: flex-start !important;
+      }
+
+      html[${ATTR_PREP}="1"] main > *,
+      html[${ATTR_PREP}="1"] .scroll-area > footer {
+        align-self: stretch !important;
+        box-sizing: border-box !important;
+        clear: both !important;
+        display: block !important;
+        flex: 0 0 auto !important;
+        float: none !important;
+        min-width: 0 !important;
+        position: relative !important;
+        width: 100% !important;
+        max-width: var(--container-size-xl, 82.5rem) !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+
+      html[${ATTR_PREP}="1"] main > #gallery,
+      html[${ATTR_PREP}="1"] #gallery [class*="MasonryContainer"] {
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root {
+        align-items: flex-start !important;
+        display: flex !important;
+        flex-flow: row nowrap !important;
+        gap: var(--mantine-spacing-xl, 2rem) !important;
+        justify-content: center !important;
+        margin: 0 !important;
+        width: 100% !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner {
+        display: contents !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col,
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col {
+        box-sizing: border-box !important;
+        flex: none !important;
+        grid-area: auto !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col[class*="ModelVersionDetails_mainSection"],
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col[class*="ModelVersionDetails_mainSection"] {
+        flex: 1 1 0 !important;
+        max-width: calc(100% - min(26rem, 34%) - var(--mantine-spacing-xl, 2rem)) !important;
+        order: 1 !important;
+        width: auto !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col:not([class*="ModelVersionDetails_mainSection"]),
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col:not([class*="ModelVersionDetails_mainSection"]) {
+        flex: 0 0 min(26rem, 34%) !important;
+        max-width: 26rem !important;
+        order: 2 !important;
+        width: min(26rem, 34%) !important;
+      }
+
+      html[${ATTR_PREP}="1"] #gallery .mx-auto.flex.justify-center.gap-4 {
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+        width: max-content !important;
+      }
+
+      html[${ATTR_PREP}="1"] [class*="ModelCarousel_reactions"],
+      html[${ATTR_PREP}="1"] #gallery [class*="ImagesAsPostsCard_reactions"] {
+        display: none !important;
+      }
+
+      @media (max-width: 900px) {
+        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root {
+          display: block !important;
+        }
+
+        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner {
+          display: block !important;
+        }
+
+        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col,
+        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col {
+          max-width: 100% !important;
+          width: 100% !important;
+        }
+      }
+
+      html[${ATTR_PREP}="1"] .sticky {
+        position: static !important;
+        transform: none !important;
+      }
+
+      html[${ATTR_PREP}="1"] .mantine-Grid-inner {
+        max-width: 100% !important;
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function applyStaticInlineLayout() {
+    document.documentElement.setAttribute(ATTR_PREP, '1');
+
+    const shellElements = new Set([
+      document.documentElement,
+      document.body,
+      document.getElementById('__next'),
+      document.getElementById('main'),
+      document.querySelector('.scroll-area'),
+      document.querySelector('main')
+    ].filter(Boolean));
+
+    for (let el = document.querySelector('main'); el && el !== document.body; el = el.parentElement) {
+      shellElements.add(el);
+    }
+
+    Array.from(shellElements).forEach(el => {
+      setImportant(el, 'box-sizing', 'border-box');
+      setImportant(el, 'columns', 'auto');
+      setImportant(el, 'contain', 'none');
+      setImportant(el, 'container-type', 'normal');
+      setImportant(el, 'height', 'auto');
+      setImportant(el, 'max-height', 'none');
+      setImportant(el, 'min-height', '0');
+      setImportant(el, 'min-width', '0');
+      setImportant(el, 'overflow', 'visible');
+      setImportant(el, 'transform', 'none');
+      setImportant(el, 'width', '100%');
+      setImportant(el, 'max-width', '100%');
+    });
+
+    Array.from(shellElements)
+      .filter(Boolean)
+      .forEach(el => {
+        if (el === document.documentElement || el === document.body) return;
+        setImportant(el, 'align-items', 'stretch');
+        setImportant(el, 'display', 'flex');
+        setImportant(el, 'flex-flow', 'column nowrap');
+        setImportant(el, 'justify-content', 'flex-start');
+      });
+
+    const main = document.querySelector('main');
+    if (main) {
+      Array.from(main.children).forEach(el => {
+        setImportant(el, 'align-self', 'stretch');
+        setImportant(el, 'box-sizing', 'border-box');
+        setImportant(el, 'clear', 'both');
+        setImportant(el, 'display', 'block');
+        setImportant(el, 'flex', '0 0 auto');
+        setImportant(el, 'float', 'none');
+        setImportant(el, 'min-width', '0');
+        setImportant(el, 'position', 'relative');
+        setImportant(el, 'width', '100%');
+        setImportant(el, 'max-width', el.id === 'gallery' ? '100%' : 'var(--container-size-xl, 82.5rem)');
+        setImportant(el, 'margin-left', 'auto');
+        setImportant(el, 'margin-right', 'auto');
+      });
+    }
+
+    $$('.scroll-area > footer, .sticky').forEach(el => {
+      setImportant(el, 'clear', 'both');
+      setImportant(el, 'display', 'block');
+      setImportant(el, 'float', 'none');
+      setImportant(el, 'position', 'static');
+      setImportant(el, 'transform', 'none');
+      setImportant(el, 'width', '100%');
+      setImportant(el, 'max-width', '100%');
+    });
+
+    $$('#gallery .mx-auto.flex.justify-center.gap-4').forEach(el => {
+      setImportant(el, 'align-items', 'flex-start');
+      setImportant(el, 'justify-content', 'flex-start');
+      setImportant(el, 'margin-left', 'auto');
+      setImportant(el, 'margin-right', 'auto');
+      setImportant(el, 'max-width', '100%');
+      setImportant(el, 'overflow', 'visible');
+      setImportant(el, 'width', 'max-content');
+    });
+
+    $$('#gallery [class*="MasonryContainer"]').forEach(el => {
+      setImportant(el, 'box-sizing', 'border-box');
+      setImportant(el, 'width', '100%');
+      setImportant(el, 'max-width', '100%');
+    });
+
+    $$('[class*="ModelCarousel_reactions"], #gallery [class*="ImagesAsPostsCard_reactions"]').forEach(el => {
+      setImportant(el, 'display', 'none');
+    });
+  }
+
+  function restoreModelHeaderLayout() {
+    const root = document.querySelector('[data-tour="model:start"]');
+    const grid = root?.querySelector('.mantine-Grid-inner');
+    const gridRoot = grid?.closest('.mantine-Grid-root');
+    if (!grid || !gridRoot) return false;
+
+    setImportant(gridRoot, 'align-items', 'flex-start');
+    setImportant(gridRoot, 'display', 'flex');
+    setImportant(gridRoot, 'flex-flow', 'row nowrap');
+    setImportant(gridRoot, 'gap', 'var(--mantine-spacing-xl, 2rem)');
+    setImportant(gridRoot, 'justify-content', 'center');
+    setImportant(gridRoot, 'margin', '0');
+    setImportant(gridRoot, 'width', '100%');
+
+    setImportant(grid, 'display', 'contents');
+    setImportant(grid, 'margin', '0');
+
+    Array.from(grid.children).forEach(col => {
+      if (!col.classList?.contains('mantine-Grid-col')) return;
+      const isMain = String(col.className || '').includes('ModelVersionDetails_mainSection');
+
+      setImportant(col, 'box-sizing', 'border-box');
+      setImportant(col, 'grid-area', 'auto');
+      setImportant(col, 'min-width', '0');
+      setImportant(col, 'order', isMain ? '1' : '2');
+      setImportant(col, 'padding', '0');
+
+      if (isMain) {
+        setImportant(col, 'flex', '1 1 0');
+        setImportant(col, 'max-width', 'calc(100% - min(26rem, 34%) - var(--mantine-spacing-xl, 2rem))');
+        setImportant(col, 'width', 'auto');
+      } else {
+        setImportant(col, 'flex', '0 0 min(26rem, 34%)');
+        setImportant(col, 'max-width', '26rem');
+        setImportant(col, 'width', 'min(26rem, 34%)');
+      }
+    });
+
+    return true;
+  }
+
+  function pinMainSectionHeights() {
+    const main = document.querySelector('main');
+    if (!main) return 0;
+
+    let pinned = 0;
+    Array.from(main.children).forEach(el => {
+      const height = Math.ceil(Math.max(el.scrollHeight || 0, el.getBoundingClientRect?.().height || 0));
+      if (height <= 0) return;
+      setImportant(el, 'min-height', `${height}px`);
+      pinned += 1;
+    });
+    return pinned;
+  }
+
+  async function prepare() {
+    ensureLayoutStyle();
+    applyStaticInlineLayout();
+    const headerLayout = restoreModelHeaderLayout();
+    await new Promise(resolve => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resolve);
+      else setTimeout(resolve, 16);
+    });
+    const pinnedSections = pinMainSectionHeights();
+    await new Promise(resolve => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resolve);
+      else setTimeout(resolve, 16);
+    });
+    return {
+      layoutStyle: Boolean(document.getElementById(STYLE_ID_LAYOUT)),
+      headerLayout,
+      inlineStyled: document.querySelectorAll(`[${ATTR_ORIGINAL_STYLE}]`).length,
+      pinnedSections,
+      sentinel: document.documentElement.getAttribute(ATTR_PREP) === '1'
+    };
+  }
+
+  function cleanup() {
+    const s = document.getElementById(STYLE_ID_LAYOUT);
+    if (s) s.remove();
+
+    document.querySelectorAll(`[${ATTR_ORIGINAL_STYLE}]`).forEach(el => {
+      const original = el.getAttribute(ATTR_ORIGINAL_STYLE);
+      if (original) {
+        el.setAttribute('style', original);
+      } else {
+        el.removeAttribute('style');
+      }
+      el.removeAttribute(ATTR_ORIGINAL_STYLE);
+    });
+
+    document.documentElement.removeAttribute(ATTR_PREP);
+  }
+
+  window.__archiverPrepareLayout = { prepare, cleanup };
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'ARCHIVER_STOP') {
+      cleanup();
+    }
+  });
+
   window.addEventListener('beforeunload', cleanup, { once: true });
 })();
 
@@ -864,21 +1248,17 @@ function svgPlayBadgeDataURL(diamPx, color = '#FFD400', stroke = 'rgba(0,0,0,.75
     });
   }
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  async function prepare() {
+    const stats = await guardOverlays(getGalleryRoot(), 1200);
+    // tiny extra settle so BG will almost always catch overlays in paint
+    await new Promise(r => setTimeout(r, 30));
+    return stats;
+  }
+
+  window.__archiverPrepareOverlays = { prepare, cleanup: cleanupOverlays };
+
+  chrome.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
-    if (msg.type === 'ARCHIVER_PREPARE_FOR_SAVE') {
-      (async () => {
-        try {
-          const stats = await guardOverlays(getGalleryRoot(), 1200);
-          // tiny extra settle so BG will almost always catch overlays in paint
-          await new Promise(r => setTimeout(r, 30));
-          sendResponse(Object.assign({ ok: true }, stats));
-        } catch (e) {
-          sendResponse({ ok: false, error: String(e) });
-        }
-      })();
-      return true;
-    }
     if (msg.type === 'ARCHIVER_STOP') {
       cleanupOverlays();
     }
