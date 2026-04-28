@@ -64,4 +64,78 @@ describe('archiver utility functions', () => {
 
     window.__archiverPrepareLayout.cleanup();
   });
+
+  test('MHTML layout prep hides inert image controls', async () => {
+    document.body.innerHTML = `
+      <main>
+        <section data-tour="model:start">
+          <div class="mantine-Grid-root">
+            <div class="mantine-Grid-inner">
+              <div class="mantine-Grid-col ModelVersionDetails_mainSection__abc">
+                <div id="header-menu" class="absolute right-2 top-2 z-10"></div>
+                <div id="header-info" class="absolute bottom-0.5 right-0.5 z-10"></div>
+                <div id="header-info-alt" class="absolute bottom-1 right-0.5 z-10"></div>
+                <div id="header-info-icon-wrap" class="absolute bottom-2 right-2 z-20">
+                  <button id="header-info-icon-button">
+                    <svg class="tabler-icon tabler-icon-info-circle"></svg>
+                  </button>
+                </div>
+                <button id="header-remix" data-activity="remix:model-carousel"></button>
+                <button id="header-left" class="absolute left-3 top-1/2"></button>
+                <button id="header-right" class="absolute right-3 top-1/2"></button>
+              </div>
+              <div class="mantine-Grid-col"></div>
+            </div>
+          </div>
+        </section>
+        <section id="gallery">
+          <button id="gallery-heading-info">
+            <svg class="tabler-icon tabler-icon-info-circle"></svg>
+          </button>
+          <div id="gallery-menu" class="absolute right-2 top-2 z-10"></div>
+          <div id="gallery-info" class="absolute bottom-0.5 right-0.5 z-10"></div>
+          <div id="gallery-info-alt" class="absolute bottom-1 right-0.5 z-10"></div>
+          <div id="gallery-info-icon-wrap" class="absolute bottom-2 right-2 z-20">
+            <button id="gallery-info-icon-button">
+              <svg class="tabler-icon tabler-icon-info-circle"></svg>
+            </button>
+          </div>
+          <button id="gallery-create" data-activity="create:model-card"></button>
+          <button id="gallery-remix" data-activity="remix:model-gallery"></button>
+          <button id="gallery-left" class="absolute left-3 top-1/2"></button>
+          <button id="gallery-right" class="absolute right-3 top-1/2"></button>
+        </section>
+      </main>
+    `;
+
+    await window.__archiverPrepareLayout.prepare();
+
+    [
+      'header-menu',
+      'header-info',
+      'header-info-alt',
+      'header-info-icon-wrap',
+      'header-info-icon-button',
+      'header-remix',
+      'header-left',
+      'header-right',
+      'gallery-menu',
+      'gallery-info',
+      'gallery-info-alt',
+      'gallery-info-icon-wrap',
+      'gallery-info-icon-button',
+      'gallery-create',
+      'gallery-remix',
+      'gallery-left',
+      'gallery-right'
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      expect(el.style.getPropertyValue('display')).toBe('none');
+      expect(el.style.getPropertyPriority('display')).toBe('important');
+    });
+
+    expect(document.getElementById('gallery-heading-info').style.getPropertyValue('display')).toBe('');
+
+    window.__archiverPrepareLayout.cleanup();
+  });
 });

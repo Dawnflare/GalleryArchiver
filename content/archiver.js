@@ -753,6 +753,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const STYLE_ID_LAYOUT = 'archiver-mhtml-layout-fix';
   const ATTR_PREP = 'data-archiver-mhtml-prep';
   const ATTR_ORIGINAL_STYLE = 'data-archiver-original-style';
+  const IMAGE_CONTROL_SELECTOR = [
+    '[data-tour="model:start"] .absolute.right-2.top-2.z-10',
+    '[data-tour="model:start"] .absolute.bottom-0\\.5.right-0\\.5.z-10',
+    '[data-tour="model:start"] .absolute.bottom-1.right-0\\.5.z-10',
+    '[data-tour="model:start"] [data-activity="remix:model-carousel"]',
+    '[data-tour="model:start"] button.absolute.left-3.top-1\\/2',
+    '[data-tour="model:start"] button.absolute.right-3.top-1\\/2',
+    '#gallery .absolute.right-2.top-2.z-10',
+    '#gallery .absolute.bottom-0\\.5.right-0\\.5.z-10',
+    '#gallery .absolute.bottom-1.right-0\\.5.z-10',
+    '#gallery [data-activity="create:model-card"]',
+    '#gallery [data-activity="remix:model-gallery"]',
+    '#gallery button.absolute.left-3.top-1\\/2',
+    '#gallery button.absolute.right-3.top-1\\/2'
+  ].join(', ');
 
   function rememberStyle(el) {
     if (!el || el.hasAttribute(ATTR_ORIGINAL_STYLE)) return;
@@ -767,6 +782,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   function $$(sel, root = document) {
     return Array.from(root.querySelectorAll(sel));
+  }
+
+  function hideIconControls(iconSelector, rootSelector) {
+    $$(rootSelector).forEach(root => {
+      $$(iconSelector, root).forEach(icon => {
+        const control = icon.closest('button, [role="button"], .mantine-ActionIcon-root, .mantine-UnstyledButton-root') || icon.parentElement;
+        const overlay = (control || icon).closest('.absolute[class*="bottom-"][class*="right-"]');
+
+        if (!overlay) return;
+        if (control) setImportant(control, 'display', 'none');
+        setImportant(overlay, 'display', 'none');
+      });
+    });
   }
 
   function ensureLayoutStyle() {
@@ -888,6 +916,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         display: none !important;
       }
 
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .absolute.right-2.top-2.z-10,
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .absolute.bottom-0\\.5.right-0\\.5.z-10,
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] .absolute.bottom-1.right-0\\.5.z-10,
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] [data-activity="remix:model-carousel"],
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] button.absolute.left-3.top-1\\/2,
+      html[${ATTR_PREP}="1"] [data-tour="model:start"] button.absolute.right-3.top-1\\/2,
+      html[${ATTR_PREP}="1"] #gallery .absolute.right-2.top-2.z-10,
+      html[${ATTR_PREP}="1"] #gallery .absolute.bottom-0\\.5.right-0\\.5.z-10,
+      html[${ATTR_PREP}="1"] #gallery .absolute.bottom-1.right-0\\.5.z-10,
+      html[${ATTR_PREP}="1"] #gallery [data-activity="create:model-card"],
+      html[${ATTR_PREP}="1"] #gallery [data-activity="remix:model-gallery"],
+      html[${ATTR_PREP}="1"] #gallery button.absolute.left-3.top-1\\/2,
+      html[${ATTR_PREP}="1"] #gallery button.absolute.right-3.top-1\\/2 {
+        display: none !important;
+      }
+
       @media (max-width: 900px) {
         html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root {
           display: block !important;
@@ -1004,6 +1048,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     $$('[class*="ModelCarousel_reactions"], #gallery [class*="ImagesAsPostsCard_reactions"]').forEach(el => {
       setImportant(el, 'display', 'none');
     });
+
+    $$(IMAGE_CONTROL_SELECTOR).forEach(el => {
+      setImportant(el, 'display', 'none');
+    });
+
+    hideIconControls('svg.tabler-icon-info-circle', '[data-tour="model:start"], #gallery');
   }
 
   function restoreModelHeaderLayout() {
