@@ -69,6 +69,31 @@ async function preparePageForSave(tabId) {
   console.log('[GA][POPUP] PREPARE complete:', res);
 }
 
+async function stopSavePreparation(tabId) {
+  try {
+    await sendToContent('ARCHIVER_STOP', {}, tabId);
+  } catch (err) {
+    console.warn('[GA][POPUP] STOP after save failed:', err);
+  }
+}
+
+async function returnLivePageViewToTop(tabId) {
+  try {
+    const res = await sendToContent('ARCHIVER_RETURN_TO_TOP', {}, tabId);
+    if (!res || res.ok !== true) {
+      throw new Error(res?.error || 'return to top failed');
+    }
+    console.log('[GA][POPUP] Live page returned to top:', res);
+  } catch (err) {
+    console.warn('[GA][POPUP] Return to top after save failed:', err);
+  }
+}
+
+async function finishAfterMHTMLSave(tabId) {
+  await stopSavePreparation(tabId);
+  await returnLivePageViewToTop(tabId);
+}
+
 async function hasCapturePermission(tab) {
   try {
     const url = new URL(tab.url);
@@ -244,8 +269,8 @@ async function doSaveInPage(tabParam) {
     try { URL.revokeObjectURL(blobUrl); } catch {}
   }
 
-  // 5) Tell content to stop overlays, etc.
-  await sendToContent('ARCHIVER_STOP', {}, tab.id);
+  // 5) Tell content to stop overlays, etc., then return the live page to the top.
+  await finishAfterMHTMLSave(tab.id);
 }
 
 // -------------------- live stats wiring --------------------
