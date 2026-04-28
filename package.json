@@ -1,6 +1,6 @@
 {
   "name": "galleryarchiver",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Brave/Chromium extension to capture infinite-scroll galleries as a **single MHTML** file.   **Core-only**: MHTML exporter, no enrichment, default max items = 200 for fast iteration.",
   "main": "background.js",
   "directories": {
