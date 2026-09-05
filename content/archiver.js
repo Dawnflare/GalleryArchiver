@@ -943,7 +943,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         max-width: 100% !important;
       }
 
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root {
+      html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] {
         align-items: flex-start !important;
         display: flex !important;
         flex-flow: row nowrap !important;
@@ -953,12 +953,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         width: 100% !important;
       }
 
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner {
+      html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-inner {
         display: contents !important;
       }
 
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col,
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col {
+      html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-inner > .mantine-Grid-col,
+      html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-col {
         box-sizing: border-box !important;
         flex: none !important;
         grid-area: auto !important;
@@ -966,16 +966,47 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         padding: 0 !important;
       }
 
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col[class*="ModelVersionDetails_mainSection"],
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col[class*="ModelVersionDetails_mainSection"] {
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"],
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] .mantine-Grid-container,
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] .mantine-Grid-root,
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] .mantine-Grid-inner,
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] .mantine-Grid-col {
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] [role="grid"] {
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-flow: row wrap !important;
+        gap: var(--mantine-spacing-md, 1rem) !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        width: 100% !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-tour="model:discussion"] [role="gridcell"] {
+        box-sizing: border-box !important;
+        flex: 1 1 calc(50% - var(--mantine-spacing-md, 1rem)) !important;
+        max-width: 100% !important;
+        min-width: min(100%, 280px) !important;
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        width: auto !important;
+      }
+
+      html[${ATTR_PREP}="1"] [data-archiver-column="main"] {
         flex: 1 1 0 !important;
         max-width: calc(100% - min(26rem, 34%) - var(--mantine-spacing-xl, 2rem)) !important;
         order: 1 !important;
         width: auto !important;
       }
 
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col:not([class*="ModelVersionDetails_mainSection"]),
-      html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col:not([class*="ModelVersionDetails_mainSection"]) {
+      html[${ATTR_PREP}="1"] [data-archiver-column="sidebar"] {
         flex: 0 0 min(26rem, 34%) !important;
         max-width: 26rem !important;
         order: 2 !important;
@@ -1014,16 +1045,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       @media (max-width: 900px) {
-        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root {
+        html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] {
           display: block !important;
         }
 
-        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner {
+        html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-inner {
           display: block !important;
         }
 
-        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-inner > .mantine-Grid-col,
-        html[${ATTR_PREP}="1"] [data-tour="model:start"] .mantine-Grid-root > .mantine-Grid-col {
+        html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-inner > .mantine-Grid-col,
+        html[${ATTR_PREP}="1"] [data-archiver-model-header="1"] > .mantine-Grid-col {
           max-width: 100% !important;
           width: 100% !important;
         }
@@ -1143,6 +1174,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const gridRoot = grid?.closest('.mantine-Grid-root');
     if (!grid || !gridRoot) return false;
 
+    const columns = Array.from(grid.children).filter(col => col.classList?.contains('mantine-Grid-col'));
+    // Civitai's CSS-module compiler changed the separators and hash position.
+    // Match the component and role within a single token, not its generated hash.
+    const mainColumn = columns.find(col => Array.from(col.classList).some(token =>
+      token.startsWith('ModelVersionDetails') && /(?:_|__)mainSection(?:__|$)/.test(token)));
+    // Unknown markup must not turn every column into a narrow sidebar.
+    if (!mainColumn || columns.length !== 2) return false;
+
+    gridRoot.setAttribute('data-archiver-model-header', '1');
+
     setImportant(gridRoot, 'align-items', 'flex-start');
     setImportant(gridRoot, 'display', 'flex');
     setImportant(gridRoot, 'flex-flow', 'row nowrap');
@@ -1154,9 +1195,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     setImportant(grid, 'display', 'contents');
     setImportant(grid, 'margin', '0');
 
-    Array.from(grid.children).forEach(col => {
-      if (!col.classList?.contains('mantine-Grid-col')) return;
-      const isMain = String(col.className || '').includes('ModelVersionDetails_mainSection');
+    columns.forEach(col => {
+      const isMain = col === mainColumn;
+      col.setAttribute('data-archiver-column', isMain ? 'main' : 'sidebar');
 
       setImportant(col, 'box-sizing', 'border-box');
       setImportant(col, 'grid-area', 'auto');
@@ -1193,9 +1234,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   async function prepare() {
+    const headerLayout = restoreModelHeaderLayout();
     ensureLayoutStyle();
     applyStaticInlineLayout();
-    const headerLayout = restoreModelHeaderLayout();
     await new Promise(resolve => {
       if (typeof requestAnimationFrame === 'function') requestAnimationFrame(resolve);
       else setTimeout(resolve, 16);
@@ -1229,6 +1270,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
 
     document.documentElement.removeAttribute(ATTR_PREP);
+    $$('[data-archiver-column]').forEach(el => el.removeAttribute('data-archiver-column'));
+    $$('[data-archiver-model-header]').forEach(el => el.removeAttribute('data-archiver-model-header'));
   }
 
   window.__archiverPrepareLayout = { prepare, cleanup };
