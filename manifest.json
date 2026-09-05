@@ -16,6 +16,8 @@
     "pageCapture"
   ],
   "host_permissions": [
+    "https://image.civitai.com/*",
+    "https://blobs-b2.civitai.com/*",
     "https://civitai.com/*",
     "https://civitai.red/*"
   ],

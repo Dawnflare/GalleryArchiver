@@ -17,7 +17,12 @@ test('freezes standalone video into anchored snapshot', async () => {
   window.history.replaceState({}, '', 'http://localhost/images/123');
 
   const v = document.createElement('video');
-  v.setAttribute('poster', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
+  const poster = 'https://image.civitai.com/example/poster.jpeg';
+  const dataUrl = 'data:image/jpeg;base64,/9j/';
+  v.setAttribute('poster', poster);
+  chrome.runtime.sendMessage.mockResolvedValue({ ok: true, dataUrl });
+  const pause = jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  const load = jest.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
   v.style.width = '320px';
   v.style.height = '180px';
   document.body.appendChild(v);
@@ -42,4 +47,8 @@ test('freezes standalone video into anchored snapshot', async () => {
   const img = anchor.querySelector('img');
   expect(img).not.toBeNull();
   expect(img.dataset.archiverFrozen).toBe('1');
+  expect(img.src).toBe(dataUrl);
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'ARCHIVER_FETCH_VIDEO_POSTER', url: poster });
+  pause.mockRestore();
+  load.mockRestore();
 });

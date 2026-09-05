@@ -481,6 +481,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // response is clearly not an image (some "poster" URLs return the original
   // video instead, which bloats the save if converted to data: URIs).
   async function imageURLToDataURL(url) {
+    try {
+      if (new URL(url).hostname === 'image.civitai.com') {
+        const result = await chrome.runtime.sendMessage({
+          type: 'ARCHIVER_FETCH_VIDEO_POSTER', url,
+        });
+        if (result?.ok && /^data:image\//.test(result.dataUrl)) return result.dataUrl;
+      }
+    } catch (_) { /* Keep the existing capture fallbacks available. */ }
     // Attempt to fetch the poster so we can inline it. Some image CDN endpoints
     // require cookies, so include credentials. If the response is not an image
     // or the fetch fails, fall back to trying via an <img> element and canvas.
