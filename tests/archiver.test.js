@@ -15,6 +15,33 @@ beforeAll(() => {
 
 describe('archiver utility functions', () => {
 
+  test.each([
+    'ModelVersionDetails_mainSection__abc',
+    'ModelVersionDetails-module-scss-module__Nm3YLG__mainSection',
+  ])('MHTML preserves main column order and width for %s', async className => {
+    document.body.innerHTML = `<main><section data-tour="model:start">
+      <div class="mantine-Grid-root"><div class="mantine-Grid-inner">
+        <div id="sidebar" class="mantine-Grid-col"></div>
+        <div id="description" class="mantine-Grid-col ${className}" style="color: red"></div>
+      </div></div></section></main>`;
+    const description = document.getElementById('description');
+    const sidebar = document.getElementById('sidebar');
+    try {
+      await window.__archiverPrepareLayout.prepare();
+      expect(description.dataset.archiverColumn).toBe('main');
+      expect(description.style.order).toBe('1');
+      expect(description.style.flexGrow).toBe('1');
+      expect(description.style.width).toBe('auto');
+      expect(sidebar.dataset.archiverColumn).toBe('sidebar');
+      expect(sidebar.style.order).toBe('2');
+      expect(sidebar.style.flexGrow).toBe('0');
+    } finally {
+      window.__archiverPrepareLayout.cleanup();
+    }
+    expect(description.getAttribute('style')).toBe('color: red');
+    expect(document.querySelector('[data-archiver-column]')).toBeNull();
+  });
+
   test('absUrl converts relative paths to absolute URLs', () => {
     expect(absUrl('/models/736706/epic-gorgeous-details')).toBe('http://localhost/models/736706/epic-gorgeous-details');
   });
@@ -167,5 +194,72 @@ describe('archiver utility functions', () => {
     expect(document.getElementById('gallery-heading-info').style.getPropertyValue('display')).toBe('');
 
     window.__archiverPrepareLayout.cleanup();
+  });
+
+  test('MHTML layout prep isolates model header grid from discussion section grid', async () => {
+    document.body.innerHTML = `
+      <main>
+        <section data-tour="model:start" class="contentCol mantine-Container-root">
+          <div class="mantine-Stack-root">
+            <div id="header-grid-root" class="mantine-Grid-root">
+              <div id="header-grid-inner" class="mantine-Grid-inner">
+                <div id="header-sidebar" class="mantine-Grid-col"></div>
+                <div id="header-main" class="mantine-Grid-col ModelVersionDetails_mainSection__abc"></div>
+              </div>
+            </div>
+          </div>
+          <div id="discussion-section" data-tour="model:discussion" class="flex flex-col gap-4">
+            <div class="mantine-Grid-container">
+              <div id="discussion-grid-root" class="mantine-Grid-root">
+                <div id="discussion-grid-inner" class="mantine-Grid-inner">
+                  <div id="discussion-col" class="mantine-Grid-col">
+                    <div class="mantine-Stack-root">
+                      <div role="grid">
+                        <div role="gridcell" style="width: 580px; top: 0px; left: 0px; position: absolute;">Comment 1</div>
+                        <div role="gridcell" style="width: 580px; top: 0px; left: 600px; position: absolute;">Comment 2</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    `;
+
+    const headerGridRoot = document.getElementById('header-grid-root');
+    const headerGridInner = document.getElementById('header-grid-inner');
+    const headerSidebar = document.getElementById('header-sidebar');
+    const headerMain = document.getElementById('header-main');
+
+    const discussionGridRoot = document.getElementById('discussion-grid-root');
+    const discussionGridInner = document.getElementById('discussion-grid-inner');
+    const discussionCol = document.getElementById('discussion-col');
+
+    try {
+      await window.__archiverPrepareLayout.prepare();
+
+      // Header grid gets tagged and transformed
+      expect(headerGridRoot.getAttribute('data-archiver-model-header')).toBe('1');
+      expect(headerGridRoot.style.display).toBe('flex');
+      expect(headerGridInner.style.display).toBe('contents');
+      expect(headerMain.dataset.archiverColumn).toBe('main');
+      expect(headerSidebar.dataset.archiverColumn).toBe('sidebar');
+
+      // Discussion grid is NOT tagged and NOT collapsed
+      expect(discussionGridRoot.getAttribute('data-archiver-model-header')).toBeNull();
+      expect(discussionGridRoot.style.display).toBe('');
+      expect(discussionGridInner.style.display).toBe('');
+      expect(discussionCol.dataset.archiverColumn).toBeUndefined();
+      expect(discussionCol.style.flex).toBe('');
+      expect(discussionCol.style.width).toBe('');
+    } finally {
+      window.__archiverPrepareLayout.cleanup();
+    }
+
+    expect(headerGridRoot.getAttribute('data-archiver-model-header')).toBeNull();
+    expect(headerMain.dataset.archiverColumn).toBeUndefined();
+    expect(headerSidebar.dataset.archiverColumn).toBeUndefined();
   });
 });
