@@ -461,6 +461,93 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
   })();
 
+// Solo detail viewers share a layout, but must not use model/gallery prep.
+(function () {
+  const marker = 'data-archiver-solo';
+  const original = 'data-archiver-solo-original-style';
+  const styleId = 'archiver-solo-layout';
+
+  function detect() {
+    if (!/^\/images\/\d+\/?$/.test(location.pathname)) return null;
+    const main = document.querySelector('main');
+    if (!main || main.querySelector('[data-tour="model:start"], #gallery')) return null;
+    const existing = main.querySelector(`[${marker}="row"]`);
+    if (existing) return { row: existing };
+    // The desktop width token plus scroll viewport distinguishes the details
+    // panel from avatars, recommendation cards, and unrelated sidebars.
+    const sidebar = Array.from(main.querySelectorAll('div')).find(el =>
+      Array.from(el.classList).some(c => /^@md:w-\[450px\]$/.test(c)) &&
+      el.querySelector('.mantine-ScrollArea-viewport'));
+    const row = sidebar?.parentElement;
+    if (!row) return null;
+    const region = Array.from(row.children).find(el => el !== sidebar &&
+      el.querySelector('video, img[class*="EdgeImage"]'));
+    const media = region?.querySelector('video, img[class*="EdgeImage"]');
+    if (!media) return null;
+    const rect = media.getBoundingClientRect();
+    const width = media.videoWidth || media.naturalWidth || rect.width;
+    const height = media.videoHeight || media.naturalHeight || rect.height;
+    return { row, sidebar, region, parent: media.parentElement,
+      media, ratio: width > 0 && height > 0 ? width / height : 1 };
+  }
+
+  function mark(el, role, styles) {
+    if (!el.hasAttribute(original)) el.setAttribute(original, el.getAttribute('style') || '');
+    el.setAttribute(marker, role);
+    for (const [prop, value] of Object.entries(styles)) el.style.setProperty(prop, value, 'important');
+  }
+
+  function prepare(view = detect()) {
+    if (!view) return { solo: false };
+    if (document.getElementById(styleId)) return { solo: true };
+    const { row, sidebar, region, parent, ratio } = view;
+    const media = view.media.isConnected ? view.media : parent.querySelector('img[data-archiver-frozen]');
+    if (!media) return { solo: false };
+    const normal = { 'min-width': '0', 'min-height': '0', height: 'auto',
+      'max-height': 'none', overflow: 'visible', transform: 'none' };
+    for (let el = row.parentElement; el; el = el.parentElement) {
+      mark(el, 'shell', { ...normal, width: '100%', 'max-width': 'none',
+        display: 'block', position: 'static', 'box-sizing': 'border-box' });
+    }
+    mark(row, 'row', { ...normal, display: 'grid', width: '100%',
+      'align-items': 'start', 'box-sizing': 'border-box' });
+    mark(sidebar, 'sidebar', { ...normal, position: 'static', inset: 'auto',
+      translate: 'none', width: '100%', 'max-width': '100%', 'box-sizing': 'border-box',
+      'overflow-wrap': 'anywhere' });
+    sidebar.querySelectorAll('.mantine-ScrollArea-root, .mantine-ScrollArea-viewport').forEach(el =>
+      mark(el, 'scroll', normal));
+    mark(region, 'region', { ...normal, width: '100%', display: 'flex',
+      'flex-direction': 'column', 'align-self': 'start' });
+    // Remove only the primary media's carousel sizing chain. Other slides and
+    // unrelated cards retain their own rules.
+    for (let el = media.parentElement; el && el !== region; el = el.parentElement) {
+      mark(el, 'media-path', { ...normal, width: '100%', 'max-width': '100%',
+        display: 'block', flex: '0 1 auto', 'aspect-ratio': 'auto' });
+    }
+    mark(media, 'media', { display: 'block', width: `min(100%, ${80 * ratio}vh)`,
+      height: 'auto', 'max-width': '100%', 'max-height': '80vh',
+      'object-fit': 'contain', 'margin-left': 'auto', 'margin-right': 'auto' });
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `[${marker}="row"] { grid-template-columns: minmax(0, 1fr) 450px !important; }
+      @media (max-width: 1023px) { [${marker}="row"] { grid-template-columns: minmax(0, 1fr) !important; } }`;
+    document.head.appendChild(style);
+    return { solo: true };
+  }
+
+  function cleanup() {
+    document.getElementById(styleId)?.remove();
+    document.querySelectorAll(`[${original}]`).forEach(el => {
+      const value = el.getAttribute(original);
+      if (value) el.setAttribute('style', value); else el.removeAttribute('style');
+      el.removeAttribute(original);
+      el.removeAttribute(marker);
+    });
+  }
+  window.__archiverPrepareSolo = { detect, prepare, cleanup };
+  chrome.runtime.onMessage.addListener(msg => { if (msg?.type === 'ARCHIVER_STOP') cleanup(); });
+})();
+
 // ------------------------------------------------------------
 // [Archiver] PREPARE: replace gallery <video> with still <img>
 // ------------------------------------------------------------
@@ -683,6 +770,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   async function prepareForSave() {
+    const solo = window.__archiverPrepareSolo?.detect?.();
     const s1 = await freezeVideosInPlace();
     const s2 = await freezeStandaloneVideos();
     const videos = {
@@ -693,8 +781,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       total:     (s1.total || 0) + (s2.total || 0),
     };
 
-    const gallery = await window.__archiverPrepareGallery?.prepare?.();
-    const layout = await window.__archiverPrepareLayout?.prepare?.();
+    const soloLayout = solo ? await window.__archiverPrepareSolo.prepare(solo) : null;
+    const gallery = soloLayout?.solo ? { skipped: true } : await window.__archiverPrepareGallery?.prepare?.();
+    const layout = soloLayout?.solo ? soloLayout : await window.__archiverPrepareLayout?.prepare?.();
     const overlays = await window.__archiverPrepareOverlays?.prepare?.();
 
     await new Promise(resolve => {
