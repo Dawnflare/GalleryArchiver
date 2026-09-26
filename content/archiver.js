@@ -62,13 +62,30 @@
   function pickBestFromSrcset(img) {
     const ss = img.getAttribute('srcset');
     if (!ss) return img.currentSrc || img.src || null;
-    // Parse candidates: "url widthDescriptor, url widthDescriptor, ..."
-    const candidates = ss.split(',').map(s => s.trim()).map(token => {
-      const m = token.match(/^(.*)\s+(\d+)(w|x)$/);
-      if (m) return { url: absUrl(m[1].trim()), width: parseInt(m[2], 10), unit: m[3] };
-      // fallback: might be just URL (rare); let width=0
-      return { url: absUrl(token.split(/\s+/)[0]), width: 0, unit: 'w' };
-    });
+    // URLs can contain commas (Civitai uses them for CDN transforms). A URL
+    // ends at whitespace; only trailing commas or commas after a descriptor
+    // separate candidates. Density descriptors can be fractional, e.g. 1.5x.
+    const candidates = [];
+    let remaining = ss;
+    while (remaining) {
+      remaining = remaining.replace(/^[\s,]+/, '');
+      const urlToken = remaining.match(/^\S+/)?.[0];
+      if (!urlToken) break;
+      remaining = remaining.slice(urlToken.length);
+      let url = urlToken;
+      let descriptor = '';
+      if (url.endsWith(',')) {
+        url = url.replace(/,+$/, '');
+      } else {
+        const end = remaining.indexOf(',');
+        descriptor = (end < 0 ? remaining : remaining.slice(0, end)).trim();
+        remaining = end < 0 ? '' : remaining.slice(end + 1);
+      }
+      const match = descriptor.match(/^(\d+(?:\.\d+)?|\.\d+)(w|x)$/);
+      if (url && (!descriptor || (match && Number(match[1]) > 0))) {
+        candidates.push({ url: absUrl(url), width: match ? Number(match[1]) : 1 });
+      }
+    }
     candidates.sort((a,b) => b.width - a.width);
     return (candidates[0] && candidates[0].url) || img.currentSrc || img.src || null;
   }
@@ -202,14 +219,23 @@
   }
 
   function getScrollElement() {
-    // Keep the original page-level scroll target: a nested scroll area can
-    // trigger lazy loading without moving the gallery through the user's view.
-    // overflow:hidden containers can also be scrolled programmatically.
-    for (const sel of ['#__next', '#app', 'main']) {
-      const el = document.querySelector(sel);
-      if (el && el.scrollHeight > el.clientHeight) return el;
+    const page = document.scrollingElement || document.documentElement || document.body;
+    const hasScrollRange = el => el && el.clientHeight > 0 && el.scrollHeight > el.clientHeight + 2;
+    // Capture styles normally make the document the visible scroller. Prefer it
+    // to internal wrappers so users see the gallery move while images load.
+    if (hasScrollRange(page)) return page;
+
+    const candidates = new Set(['#__next', '#app', 'main'].map(sel => document.querySelector(sel)));
+    // Some layouts keep the gallery inside a constrained scroll viewport.
+    for (let el = document.querySelector('#gallery') || document.querySelector('main'); el; el = el.parentElement) {
+      candidates.add(el);
     }
-    return document.scrollingElement || document.documentElement || document.body;
+    for (const el of candidates) {
+      // Visible/clip overflow can increase scrollHeight without allowing any
+      // scrolling at all. Hidden overflow still supports programmatic scrolling.
+      if (hasScrollRange(el) && /^(auto|scroll|hidden)$/.test(getComputedStyle(el).overflowY)) return el;
+    }
+    return page;
   }
 
   async function autoScrollLoop() {
@@ -329,10 +355,12 @@
     postState();
     ensureBucket();
     startObserver();
+    // Changing the shell height can transfer scrolling to the document. Choose
+    // the target only after those styles have taken effect.
+    applyScrollStyles();
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
-    applyScrollStyles();
     autoScrollLoop();
   }
 

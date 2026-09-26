@@ -53,6 +53,26 @@ describe('archiver utility functions', () => {
     expect(result).toMatch(/big.jpg$/);
   });
 
+  test('keeps commas inside Civitai image URLs and accepts fractional pixel densities', () => {
+    const img = document.createElement('img');
+    const base = 'https://image.civitai.com/example/';
+    const small = `${base}anim=false,width=800,optimized=true/image.jpeg`;
+    const large = `${base}anim=false,width=1200,optimized=true/image.jpeg`;
+    img.src = small;
+    img.srcset = `${small} 1x, ${large} 1.5x`;
+    expect(pickBestFromSrcset(img)).toBe(large);
+  });
+
+  test.each([
+    ['small.jpg, big.jpg 2x', 'http://localhost/big.jpg'],
+    ['data:image/png;base64,AAAA 1x, large.jpg 2x', 'http://localhost/large.jpg'],
+    ['small.jpg 800w, big.jpg 1200w', 'http://localhost/big.jpg'],
+  ])('parses srcset candidates in %s', (srcset, expected) => {
+    const img = document.createElement('img');
+    img.srcset = srcset;
+    expect(pickBestFromSrcset(img)).toBe(expected);
+  });
+
   test('isTinyDataURI detects small data URIs', () => {
     const tiny = 'data:image/png;base64,' + Buffer.from('a'.repeat(10)).toString('base64');
     expect(isTinyDataURI(tiny)).toBe(true);
