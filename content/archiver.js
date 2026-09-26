@@ -953,6 +953,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const STYLE_ID_LAYOUT = 'archiver-mhtml-layout-fix';
   const ATTR_PREP = 'data-archiver-mhtml-prep';
   const ATTR_ORIGINAL_STYLE = 'data-archiver-original-style';
+  const ATTR_DISCUSSION = 'data-archiver-discussion';
   const IMAGE_CONTROL_SELECTOR = [
     '[data-tour="model:start"] .absolute.right-2.top-2.z-10',
     '[data-tour="model:start"] .absolute.bottom-0\\.5.right-0\\.5.z-10',
@@ -1285,6 +1286,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
 
     hideIconControls('svg.tabler-icon-info-circle', '[data-tour="model:start"], #gallery');
+
+    // The model's empty side rail has a 600px minimum height. Archive mode
+    // stacks the main region's children, moving that empty space below the
+    // discussion. Only collapse empty rails beside the model content column.
+    $$('[data-tour="model:start"]').forEach(content => {
+      if (!content.parentElement) return;
+      Array.from(content.parentElement.children).forEach(sibling => {
+        const isRail = Array.from(sibling.classList).some(token => /(?:_|__)rail(?:__|$)/.test(token));
+        if (sibling !== content && isRail && !sibling.children.length && !sibling.textContent.trim()) {
+          setImportant(sibling, 'display', 'none');
+        }
+      });
+    });
   }
 
   function restoreModelHeaderLayout() {
@@ -1344,6 +1358,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     let pinned = 0;
     Array.from(main.children).forEach(el => {
+      // Discussion cards now participate in normal document flow. A pixel
+      // minimum retains stale space when the archive reflows at a new width.
+      if (el.matches('[data-tour="model:discussion"]') || el.querySelector('[data-tour="model:discussion"]')) {
+        setImportant(el, 'min-height', '0');
+        return;
+      }
       const height = Math.ceil(Math.max(el.scrollHeight || 0, el.getBoundingClientRect?.().height || 0));
       if (height <= 0) return;
       setImportant(el, 'min-height', `${height}px`);
@@ -1352,7 +1372,66 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return pinned;
   }
 
+  async function preserveDiscussion() {
+    let preserved = 0;
+    for (const section of $$('[data-tour="model:discussion"]')) {
+      if (section.querySelector(`[${ATTR_DISCUSSION}]`)) continue;
+      const grid = section.querySelector('[role="grid"]');
+      if (!grid) continue;
+
+      // Civitai virtualizes these cards: scrolling down the gallery can leave
+      // an empty, fixed-height grid. Let the site mount the comments again before
+      // changing its layout, then keep a copy outside the React-managed grid.
+      const positions = [];
+      for (let el = grid.parentElement; el; el = el.parentElement) {
+        positions.push([el, el.scrollLeft, el.scrollTop]);
+      }
+      try {
+        if (typeof grid.scrollIntoView === 'function') {
+          grid.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+        const deadline = performance.now() + 5000;
+        let previous = '';
+        do {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const text = grid.textContent.trim();
+          if (grid.querySelector('[role="gridcell"]') && text && text === previous) break;
+          previous = text;
+        } while (performance.now() < deadline);
+
+        if (!grid.querySelector('[role="gridcell"]') || !grid.textContent.trim()) continue;
+        const copy = grid.cloneNode(true);
+        copy.setAttribute(ATTR_DISCUSSION, '1');
+        const style = (el, rules) => Object.entries(rules).forEach(([key, value]) =>
+          el.style.setProperty(key, value, 'important'));
+        style(copy, {
+          display: 'grid', 'grid-template-columns': 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: 'var(--mantine-spacing-md, 1rem)', height: 'auto', 'max-height': 'none',
+          'min-height': '0', width: '100%', position: 'relative',
+        });
+        $$('[role="gridcell"]', copy).forEach(cell => style(cell, {
+          position: 'static', top: 'auto', left: 'auto', transform: 'none',
+          width: 'auto', 'min-width': '0', 'max-width': '100%',
+        }));
+        // The saved page cannot expand spoilers interactively; preserve the
+        // full comment text already supplied by the page.
+        $$('.mantine-Spoiler-content', copy).forEach(el => style(el, { 'max-height': 'none', overflow: 'visible' }));
+        $$('.mantine-Spoiler-control', copy).forEach(el => style(el, { display: 'none' }));
+        grid.after(copy);
+        setImportant(grid, 'display', 'none');
+        preserved++;
+      } finally {
+        for (const [el, left, top] of positions) {
+          el.scrollLeft = left;
+          el.scrollTop = top;
+        }
+      }
+    }
+    return preserved;
+  }
+
   async function prepare() {
+    const discussionGrids = await preserveDiscussion();
     const headerLayout = restoreModelHeaderLayout();
     ensureLayoutStyle();
     applyStaticInlineLayout();
@@ -1368,6 +1447,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return {
       layoutStyle: Boolean(document.getElementById(STYLE_ID_LAYOUT)),
       headerLayout,
+      discussionGrids,
       inlineStyled: document.querySelectorAll(`[${ATTR_ORIGINAL_STYLE}]`).length,
       pinnedSections,
       sentinel: document.documentElement.getAttribute(ATTR_PREP) === '1'
@@ -1377,6 +1457,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   function cleanup() {
     const s = document.getElementById(STYLE_ID_LAYOUT);
     if (s) s.remove();
+    $$(`[${ATTR_DISCUSSION}]`).forEach(el => el.remove());
 
     document.querySelectorAll(`[${ATTR_ORIGINAL_STYLE}]`).forEach(el => {
       const original = el.getAttribute(ATTR_ORIGINAL_STYLE);
