@@ -57,7 +57,7 @@ The live counters show how much has been seen and captured.
 
 Click **Start and Save**, or press `Alt+3`.
 
-This starts the capture process and automatically saves when the configured item limit is reached.
+This starts the capture process and automatically saves when the configured item limit is reached, or when the page stays at the bottom without new images or page growth for about six seconds. Images still loading receive extra time (up to about 30 seconds of inactivity). This also works when the gallery has fewer images than **Max items**.
 
 ### Save All Tabs
 
@@ -71,7 +71,7 @@ The extension attempts to save supported HTTP/HTTPS tabs in the current window. 
 | --- | --- | --- |
 | **Start** | `Alt+1` | Starts autoscroll capture on the active page. |
 | **Save as MHTML** | `Alt+2` | Prepares the active page and saves it as `.mhtml`. |
-| **Start and Save** | `Alt+3` | Starts capture and saves automatically after the item limit is reached. |
+| **Start and Save** | `Alt+3` | Starts capture and saves automatically at the item limit or the end of the page. |
 | **Save all tabs** | `Alt+4` | Saves supported tabs in the current browser window. |
 | **Reset** | none | Stops capture, resets page state, reloads the tab, and reloads the extension. |
 | **Stop** | none | Stops the current capture/autoscroll run. |

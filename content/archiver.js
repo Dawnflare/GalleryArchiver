@@ -201,6 +201,9 @@
   }
 
   function getScrollElement() {
+    // Keep the original page-level scroll target: a nested scroll area can
+    // trigger lazy loading without moving the gallery through the user's view.
+    // overflow:hidden containers can also be scrolled programmatically.
     for (const sel of ['#__next', '#app', 'main']) {
       const el = document.querySelector(sel);
       if (el && el.scrollHeight > el.clientHeight) return el;
@@ -211,6 +214,13 @@
   async function autoScrollLoop() {
     const scrollEl = state.scrollEl || (state.scrollEl = getScrollElement());
     state.lastNewItemAt = performance.now();
+    // Require a quiet interval at the bottom; infinite galleries can pause here
+    // while fetching their next batch. Longer capture settings need time to settle.
+    const bottomWait = Math.max(6000, state.stabilityTimeout + 2 * state.scrollDelay);
+    let bottomIdleSince = null;
+    let lastHeight = scrollEl.scrollHeight;
+    let lastSeen = state.seen;
+    let lastCaptured = state.captured;
     while (state.running) {
       const before = state.captured;
       scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
@@ -220,8 +230,28 @@
       scanOnce();
       if (!state.running) break;
 
-      // If no progress for a while, attempt a small nudge but keep looping
       const now = performance.now();
+      const height = scrollEl.scrollHeight;
+      const atBottom = scrollEl.clientHeight > 0 &&
+        scrollEl.scrollTop + scrollEl.clientHeight >= height - 2;
+      if (!atBottom || height !== lastHeight || state.seen !== lastSeen || state.captured !== lastCaptured) {
+        bottomIdleSince = null;
+      } else if (bottomIdleSince === null) {
+        bottomIdleSince = now;
+      }
+      lastHeight = height;
+      lastSeen = state.seen;
+      lastCaptured = state.captured;
+
+      if (state.autoSave && bottomIdleSince !== null && now - bottomIdleSince >= bottomWait) {
+        const loadingImages = Array.from(state.bucket.querySelectorAll('img')).some(img => !img.complete);
+        // Give in-flight images extra time, but don't hang forever on a broken request.
+        if (!loadingImages || now - bottomIdleSince >= Math.max(30000, bottomWait)) {
+          stopRunning(false, false, true);
+          break;
+        }
+      }
+      // Keep nudging stalled galleries while waiting for more content.
       if (state.captured > before) {
         state.lastNewItemAt = now;
       } else if (now - state.lastNewItemAt > 6000) {
@@ -289,7 +319,7 @@
     autoScrollLoop();
   }
 
-  function stopRunning(freeze=false, restoreStyles=true) {
+  function stopRunning(freeze=false, restoreStyles=true, reachedEnd=false) {
     state.running = false;
     if (state.observer) {
       state.observer.disconnect();
@@ -310,7 +340,7 @@
       }
     }
     postState();
-    if (state.autoSave && state.captured >= state.maxItems) {
+    if (state.autoSave && (state.captured >= state.maxItems || reachedEnd)) {
       chrome.runtime.sendMessage({ type: 'ARCHIVER_SAVE_MHTML' });
     }
     state.autoSave = false;
