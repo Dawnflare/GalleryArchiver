@@ -31,6 +31,8 @@ The extension can autoscroll through galleries, preserve images that would other
 
 The extension requests access only to `civitai.com` and `civitai.red`.
 
+After updating an unpacked installation, click **Reload** on the extension's card, then refresh any open Civitai tabs once to load the updated content script.
+
 ## Basic Workflows
 
 ### Save The Current Page
@@ -59,6 +61,8 @@ The live counters show how much has been seen and captured.
 Click **Start and Save**, or press `Alt+3`.
 
 This starts the capture process and automatically saves when the configured item limit is reached, or when the page stays at the bottom without new images or page growth for about six seconds. Images still loading receive extra time (up to about 30 seconds of inactivity). This also works when the gallery has fewer images than **Max items**.
+
+The visible page scrolls as images load. After a save finishes, you can select another model version using Civitai's in-page controls and press `Alt+3` again without refreshing. Each run starts a fresh image collection.
 
 ### Save All Tabs
 
@@ -145,6 +149,8 @@ Preparation includes:
 
 - freezing or replacing gallery videos with still images where possible
 - applying Civitai-specific layout fixes for model pages
+- restoring off-screen discussion comments and preserving their full text
+- collapsing empty model sidebars so the gallery follows the discussion without a large blank gap
 - making sticky and dynamic layout regions archive-friendly
 - hiding broken image reaction overlays that render as repeated digit strings in MHTML
 - settling the page briefly before capture
@@ -212,7 +218,15 @@ Useful project docs:
 
 ## Repository Status
 
-Current extension version in `manifest.json`: `1.1`.
+Current extension version: `1.1.1` (kept in sync across `manifest.json`, `package.json`, and `package-lock.json`).
+
+### Changes In 1.1.1
+
+- Automatically saves at the end of a gallery even when fewer images exist than **Max items**.
+- Restores page styles after saving so repeated `Alt+3` runs work across in-page model version changes.
+- Selects the visible scroll container after capture styles are applied, fixing stalls caused by non-scrollable content overflow.
+- Preserves commas in Civitai image URLs and handles fractional image-density descriptors, fixing failed image captures.
+- Preserves discussion comments and removes the empty space caused by unused model sidebars.
 
 The major Civitai MHTML layout fix is merged to `main` in commit:
 

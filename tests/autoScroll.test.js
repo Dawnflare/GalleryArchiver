@@ -191,6 +191,7 @@ describe('Start and Save at the end of a gallery', () => {
   });
 
   test.each(['__next', 'app', 'main'])('keeps the original %s page scroller when a nested scroll area exists', async target => {
+    pageHeight = 600; // The document itself cannot scroll in this layout.
     document.body.innerHTML = `<main id="${target}" style="overflow-y: hidden"><div class="scroll-area" style="overflow-y: auto"></div></main>`;
     const page = document.querySelector('main');
     const nested = document.querySelector('.scroll-area');
@@ -209,6 +210,62 @@ describe('Start and Save at the end of a gallery', () => {
     await jest.advanceTimersByTimeAsync(9000);
     expect(page.scrollTop).toBe(1200);
     expect(scroller.scrollBy).not.toHaveBeenCalled();
+    expect(saves()).toHaveLength(1);
+  });
+
+  test('scrolls the viewport instead of a main element with non-scrollable overflow', async () => {
+    document.body.innerHTML = '<main style="overflow-y: visible"></main>';
+    const main = document.querySelector('main');
+    Object.defineProperties(main, {
+      clientHeight: { value: 1800 }, scrollHeight: { value: 1808 },
+    });
+    main.scrollTo = jest.fn();
+    main.scrollBy = jest.fn();
+    await start();
+    await jest.advanceTimersByTimeAsync(9000);
+    expect(scroller.scrollTop).toBe(1200);
+    expect(main.scrollBy).not.toHaveBeenCalled();
+    expect(saves()).toHaveLength(1);
+  });
+
+  test('chooses the scroll target after applying capture styles', async () => {
+    document.body.innerHTML = '<main style="overflow-y: auto"></main>';
+    const main = document.querySelector('main');
+    Object.defineProperties(main, {
+      clientHeight: { get: () => document.body.style.height === 'auto' ? 1800 : 600 },
+      scrollHeight: { value: 1800 },
+    });
+    Object.defineProperty(scroller, 'scrollHeight', {
+      configurable: true, get: () => document.body.style.height === 'auto' ? 1800 : 600,
+    });
+    main.scrollTo = jest.fn();
+    main.scrollBy = jest.fn();
+    await start();
+    await jest.advanceTimersByTimeAsync(9000);
+    expect(scroller.scrollTop).toBe(1200);
+    expect(main.scrollBy).not.toHaveBeenCalled();
+    expect(saves()).toHaveLength(1);
+  });
+
+  test('uses the gallery viewport when the document cannot scroll', async () => {
+    pageHeight = 600;
+    document.body.innerHTML = '<div class="scroll-area" style="overflow-y: auto"><main style="overflow-y: visible"></main></div>';
+    const viewport = document.querySelector('.scroll-area');
+    const main = document.querySelector('main');
+    Object.defineProperties(viewport, {
+      clientHeight: { value: 600 }, scrollHeight: { value: 1800 },
+    });
+    Object.defineProperties(main, {
+      clientHeight: { value: 1800 }, scrollHeight: { value: 1808 },
+    });
+    main.scrollTo = jest.fn();
+    main.scrollBy = jest.fn();
+    viewport.scrollTo = jest.fn((x, y) => { viewport.scrollTop = y; });
+    viewport.scrollBy = jest.fn((x, y) => { viewport.scrollTop = Math.min(1200, viewport.scrollTop + y); });
+    await start();
+    await jest.advanceTimersByTimeAsync(9000);
+    expect(viewport.scrollTop).toBe(1200);
+    expect(main.scrollBy).not.toHaveBeenCalled();
     expect(saves()).toHaveLength(1);
   });
 });
