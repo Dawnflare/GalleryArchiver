@@ -17,8 +17,9 @@
     lastNewItemAt: 0,
     bucket: null,
     scrollEl: null,
-    origHtmlStyle: '',
-    origBodyStyle: '',
+    origHtmlStyle: null,
+    origBodyStyle: null,
+    scrollStylesApplied: false,
     autoSave: false,
   };
 
@@ -264,6 +265,9 @@
   }
 
   function applyScrollStyles() {
+    state.origHtmlStyle = document.documentElement.getAttribute('style');
+    state.origBodyStyle = document.body.getAttribute('style');
+    state.scrollStylesApplied = true;
     document.documentElement.style.height = 'auto';
     document.documentElement.style.overflowY = 'auto';
     document.body.style.height = 'auto';
@@ -271,8 +275,20 @@
   }
 
   function restoreScrollStyles() {
-    document.documentElement.setAttribute('style', state.origHtmlStyle);
-    document.body.setAttribute('style', state.origBodyStyle);
+    // Save preparation remembers the temporary capture styles. Unwind it first,
+    // otherwise its later Stop listener reinstates height:auto after we restore
+    // the live page, leaving subsequent runs with the wrong scroll container.
+    window.__archiverPrepareLayout?.cleanup?.();
+    window.__archiverPrepareSolo?.cleanup?.();
+    if (!state.scrollStylesApplied) return;
+    for (const [el, original] of [
+      [document.documentElement, state.origHtmlStyle],
+      [document.body, state.origBodyStyle],
+    ]) {
+      if (original === null) el.removeAttribute('style');
+      else el.setAttribute('style', original);
+    }
+    state.scrollStylesApplied = false;
   }
 
   function freezePage() {
@@ -294,6 +310,9 @@
     state.deduped = 0;
     state.seenDetailUrls.clear();
     state.allImageUrls = new Set();
+    // A fresh run must not carry archived images from the previous model version.
+    state.bucket?.remove();
+    state.bucket = null;
     // Load options before starting capture
     const opts = await new Promise(resolve => {
     chrome.storage.local.get({ maxItems: 200, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
@@ -313,8 +332,6 @@
     state.scrollEl = getScrollElement();
     state.scrollEl.scrollTo(0, 0);
     scanOnce();
-    state.origHtmlStyle = document.documentElement.getAttribute('style') || '';
-    state.origBodyStyle = document.body.getAttribute('style') || '';
     applyScrollStyles();
     autoScrollLoop();
   }
