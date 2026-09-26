@@ -13,6 +13,7 @@ The extension can autoscroll through galleries, preserve images that would other
 
 - Saves the current page as a single `.mhtml` archive.
 - Preserves dynamically loaded Civitai gallery images before they are unloaded by the page.
+- Restores off-screen discussion comments before saving and preserves their full text in the archive.
 - Handles many Civitai model pages whose native Brave/Chrome MHTML output has broken columns, overlapping sections, or off-screen galleries.
 - Converts gallery videos into still image snapshots where possible, with a visible play badge.
 - Opens the save dialog from the page context so Brave/Chromium can reuse the last-used save folder.
