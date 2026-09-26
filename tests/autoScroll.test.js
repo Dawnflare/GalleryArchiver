@@ -18,6 +18,8 @@ describe('Start and Save at the end of a gallery', () => {
     jest.resetModules();
     jest.useFakeTimers();
     document.body.innerHTML = '';
+    document.documentElement.removeAttribute('style');
+    document.body.removeAttribute('style');
     pageHeight = 1800;
     imagesLoading = false;
     options = { maxItems: 500, scrollDelay: 300, stabilityTimeout: 400 };
@@ -148,6 +150,44 @@ describe('Start and Save at the end of a gallery', () => {
     await jest.advanceTimersByTimeAsync(500);
     expect(saves()).toHaveLength(1);
     expect(scroller.scrollTop).toBeLessThan(pageHeight - 600);
+  });
+
+  test('restores original page styles after each save and can save a second model version', async () => {
+    const htmlStyle = 'height: 100%; overflow-y: hidden;';
+    const bodyStyle = 'height: 100%; color: red;';
+    document.documentElement.setAttribute('style', htmlStyle);
+    document.body.setAttribute('style', bodyStyle);
+    for (let version = 1; version <= 2; version++) {
+      document.querySelectorAll('a').forEach(el => el.remove());
+      addImage(`version-${version}`);
+      await start();
+      await jest.advanceTimersByTimeAsync(9000);
+      expect(saves()).toHaveLength(version);
+
+      const preparing = window.__archiverPrepareLayout.prepare();
+      await jest.advanceTimersByTimeAsync(100);
+      await preparing;
+      // The popup sends Stop to every content-script listener after capture.
+      for (const [listener] of chrome.runtime.onMessage.addListener.mock.calls) {
+        listener({ type: 'ARCHIVER_STOP' }, {}, () => {});
+      }
+      expect(document.documentElement.getAttribute('style')).toBe(htmlStyle);
+      expect(document.body.getAttribute('style')).toBe(bodyStyle);
+      expect(document.querySelectorAll('#civitai-archiver-bucket img')).toHaveLength(1);
+    }
+  });
+
+  test('Stop after a direct save preserves styles even when capture was never started', async () => {
+    document.documentElement.style.height = '100%';
+    document.body.style.overflow = 'hidden';
+    const preparing = window.__archiverPrepareLayout.prepare();
+    await jest.advanceTimersByTimeAsync(100);
+    await preparing;
+    for (const [listener] of chrome.runtime.onMessage.addListener.mock.calls) {
+      listener({ type: 'ARCHIVER_STOP' }, {}, () => {});
+    }
+    expect(document.documentElement.style.height).toBe('100%');
+    expect(document.body.style.overflow).toBe('hidden');
   });
 
   test.each(['__next', 'app', 'main'])('keeps the original %s page scroller when a nested scroll area exists', async target => {
