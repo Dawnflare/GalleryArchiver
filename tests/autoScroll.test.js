@@ -1,5 +1,5 @@
 describe('Start and Save at the end of a gallery', () => {
-  let handler, scroller, pageHeight, options, imagesLoading;
+  let handler, scroller, pageHeight, options, imagesLoading, prepareForSave;
 
   const saves = () => chrome.runtime.sendMessage.mock.calls
     .filter(([message]) => message.type === 'ARCHIVER_SAVE_MHTML');
@@ -29,9 +29,9 @@ describe('Start and Save at the end of a gallery', () => {
       scrollHeight: { configurable: true, get: () => pageHeight },
     });
     scroller.scrollTop = 0;
-    scroller.scrollTo = jest.fn((x, y) => { scroller.scrollTop = y; });
-    scroller.scrollBy = jest.fn((x, y) => {
-      scroller.scrollTop = Math.min(Math.max(0, pageHeight - 600), scroller.scrollTop + y);
+    scroller.scrollTo = jest.fn(({ top }) => { scroller.scrollTop = top; });
+    scroller.scrollBy = jest.fn(({ top }) => {
+      scroller.scrollTop = Math.min(Math.max(0, pageHeight - 600), scroller.scrollTop + top);
     });
     jest.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockImplementation(() => !imagesLoading);
     jest.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(100);
@@ -42,7 +42,7 @@ describe('Start and Save at the end of a gallery', () => {
       },
       storage: { local: { get: jest.fn((defaults, callback) => callback(options)) } },
     };
-    require('../content/archiver.js');
+    ({ prepareForSave } = require('../content/archiver.js'));
     handler = chrome.runtime.onMessage.addListener.mock.calls[0][0];
   });
 
@@ -152,6 +152,81 @@ describe('Start and Save at the end of a gallery', () => {
     expect(scroller.scrollTop).toBeLessThan(pageHeight - 600);
   });
 
+  test('stops scrolling at the limit throughout slow save preparation', async () => {
+    options.maxItems = 2;
+    document.body.innerHTML = '<section id="gallery"><div id="loader" style="min-height: 36px; grid-column: 1 / -1"></div></section>';
+    addImage('first');
+    addImage('second');
+    await start();
+    await jest.advanceTimersByTimeAsync(500);
+    expect(saves()).toHaveLength(1);
+    expect(document.getElementById('loader').style.display).toBe('none');
+    expect(jest.getTimerCount()).toBe(0);
+    const scrollCalls = scroller.scrollBy.mock.calls.length;
+    const collected = document.querySelectorAll('#civitai-archiver-bucket img');
+    expect(collected).toHaveLength(2);
+    const realPrepare = window.__archiverPrepareGallery.prepare;
+    let finishPreparation;
+    window.__archiverPrepareGallery.prepare = jest.fn(() => new Promise(resolve => { finishPreparation = resolve; }));
+    try {
+      const preparing = prepareForSave();
+      await jest.advanceTimersByTimeAsync(100);
+      pageHeight += 6000;
+      addImage('during-preparation');
+      await jest.advanceTimersByTimeAsync(10000);
+      expect(scroller.scrollBy).toHaveBeenCalledTimes(scrollCalls);
+      expect(document.querySelectorAll('#civitai-archiver-bucket img')).toHaveLength(2);
+      expect(saves()).toHaveLength(1);
+      finishPreparation({});
+      await jest.advanceTimersByTimeAsync(2000);
+      await preparing;
+    } finally {
+      window.__archiverPrepareGallery.prepare = realPrepare;
+    }
+  });
+
+  test('manual save pauses an active capture before preparing the page', async () => {
+    document.body.innerHTML = '<section id="gallery"><div id="loader" style="min-height: 36px; grid-column: 1 / -1"></div></section>';
+    addImage('captured');
+    await start();
+    await jest.advanceTimersByTimeAsync(500);
+    const scrollCalls = scroller.scrollBy.mock.calls.length;
+    const preparing = prepareForSave();
+    expect(document.getElementById('loader').style.display).toBe('none');
+    await jest.advanceTimersByTimeAsync(10000);
+    await preparing;
+    expect(scroller.scrollBy).toHaveBeenCalledTimes(scrollCalls);
+    expect(document.querySelectorAll('#civitai-archiver-bucket img')).toHaveLength(1);
+    expect(saves()).toHaveLength(0);
+    handler({ type: 'ARCHIVER_STOP' });
+    expect(document.getElementById('loader').style.display).toBe('');
+  });
+
+  test('a stopped loop and pending images cannot join an immediate new run', async () => {
+    addImage('previous-run');
+    await start();
+    handler({ type: 'ARCHIVER_STOP' });
+    document.querySelector('a').remove();
+    await start();
+    scroller.scrollBy.mockClear();
+    await jest.advanceTimersByTimeAsync(600);
+    expect(scroller.scrollBy).toHaveBeenCalledTimes(2);
+    expect(document.querySelectorAll('#civitai-archiver-bucket img')).toHaveLength(0);
+    expect(scroller.scrollBy).toHaveBeenCalledWith({ top: 540, behavior: 'instant' });
+  });
+
+  test('save preparation cancels a start still waiting for options', async () => {
+    let finishOptions;
+    chrome.storage.local.get.mockImplementation((defaults, callback) => { finishOptions = callback; });
+    await start();
+    const preparing = prepareForSave();
+    finishOptions(options);
+    await jest.advanceTimersByTimeAsync(2000);
+    await preparing;
+    expect(scroller.scrollBy).not.toHaveBeenCalled();
+    expect(document.querySelector('#civitai-archiver-bucket')).toBeNull();
+  });
+
   test('restores original page styles after each save and can save a second model version', async () => {
     const htmlStyle = 'height: 100%; overflow-y: hidden;';
     const bodyStyle = 'height: 100%; color: red;';
@@ -199,8 +274,8 @@ describe('Start and Save at the end of a gallery', () => {
       Object.defineProperties(element, {
         clientHeight: { value: 600 }, scrollHeight: { value: 1800 },
       });
-      element.scrollTo = jest.fn((x, y) => { element.scrollTop = y; });
-      element.scrollBy = jest.fn((x, y) => { element.scrollTop = Math.min(1200, element.scrollTop + y); });
+      element.scrollTo = jest.fn(({ top }) => { element.scrollTop = top; });
+      element.scrollBy = jest.fn(({ top }) => { element.scrollTop = Math.min(1200, element.scrollTop + top); });
     }
     await start();
     await jest.advanceTimersByTimeAsync(300);
@@ -260,8 +335,8 @@ describe('Start and Save at the end of a gallery', () => {
     });
     main.scrollTo = jest.fn();
     main.scrollBy = jest.fn();
-    viewport.scrollTo = jest.fn((x, y) => { viewport.scrollTop = y; });
-    viewport.scrollBy = jest.fn((x, y) => { viewport.scrollTop = Math.min(1200, viewport.scrollTop + y); });
+    viewport.scrollTo = jest.fn(({ top }) => { viewport.scrollTop = top; });
+    viewport.scrollBy = jest.fn(({ top }) => { viewport.scrollTop = Math.min(1200, viewport.scrollTop + top); });
     await start();
     await jest.advanceTimersByTimeAsync(9000);
     expect(viewport.scrollTop).toBe(1200);

@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Save preparation infinite-loader regression</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  .scroll-area { height: 400px; overflow-y: auto; }
+  #cards { display: grid; grid-template-columns: repeat(5, 1fr); }
+  #cards a { height: 120px; }
+  #cards img { width: 80px; height: 100px; }
+</style>
+<div class="scroll-area"><main><section id="gallery">
+  <div id="cards"></div>
+  <div id="loader" style="min-height: 36px; grid-column: 1 / -1">
+    <div style="height: 36px">Loading more</div>
+  </div>
+</section></main></div>
+<script>
+  // Mirrors Civitai's InViewLoader: a 400px root margin and another batch
+  // every 500ms while inView stays true, even without any scroll events.
+  // https://github.com/civitai/civitai/blob/main/src/components/InView/InViewLoader.tsx
+  window.metrics = { requests: 0, images: 0, scrollEvents: 0, captured: 0, saves: 0 };
+  window.listeners = [];
+  window.module = { exports: {} };
+  window.chrome = {
+    runtime: {
+      onMessage: { addListener: listener => listeners.push(listener) },
+      sendMessage: message => {
+        if (message.type === 'ARCHIVER_STATS') metrics.captured = message.captured;
+        if (message.type === 'ARCHIVER_SAVE_MHTML') metrics.saves++;
+      }
+    },
+    storage: { local: { get: (defaults, callback) => callback({
+      maxItems: 50, scrollDelay: 100, stabilityTimeout: 50
+    }) } }
+  };
+  const root = document.querySelector('.scroll-area');
+  root.addEventListener('scroll', () => metrics.scrollEvents++);
+  const cards = document.getElementById('cards');
+  function batch() {
+    metrics.requests++;
+    for (let i = 0; i < 25; i++) {
+      const a = document.createElement('a');
+      a.href = 'https://civitai.com/images/' + (++metrics.images);
+      const img = new Image();
+      img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100"><rect width="80" height="100" fill="steelblue"/><!--' + 'image'.repeat(250) + '--></svg>');
+      a.append(img);
+      cards.append(a);
+    }
+  }
+  batch();
+  let inView = false;
+  new IntersectionObserver(entries => { inView = entries[0].isIntersecting; }, {
+    root, rootMargin: '400px 0px'
+  }).observe(document.getElementById('loader'));
+  setInterval(() => { if (inView && metrics.requests < 50) batch(); }, 500);
+</script>

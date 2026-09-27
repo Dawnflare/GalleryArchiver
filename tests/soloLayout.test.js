@@ -4,7 +4,10 @@ beforeAll(() => {
   require('../content/archiver.js');
 });
 
-afterEach(() => window.__archiverPrepareSolo.cleanup());
+afterEach(() => {
+  window.__archiverPagination.resume();
+  window.__archiverPrepareSolo.cleanup();
+});
 
 function fixture(media = '<img class="EdgeImage__image">') {
   window.history.replaceState({}, '', '/images/123');

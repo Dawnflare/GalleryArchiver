@@ -1,5 +1,51 @@
 /* Content script: core hoarding, anti-placeholder, auto-scroll, freeze */
 
+// Civitai's InViewLoader repeatedly calls fetchNextPage while its marker is in
+// view. Expanding the scroll-area for MHTML makes that true even with autoscroll
+// stopped. Hide the marker (not the images) so its real IntersectionObserver
+// reports out-of-view and clears the site's existing inView state.
+(() => {
+  const hidden = new Map();
+  let observer = null;
+
+  function hideLoaders() {
+    document.querySelectorAll('#gallery [style]').forEach(el => {
+      // ImagesAsPostsInfinite supplies gridColumn; InViewLoader supplies the
+      // 36px minHeight even when its spinner children are not mounted.
+      if (el.style.minHeight !== '36px' || el.style.gridColumn.replace(/\s/g, '') !== '1/-1') return;
+      if (!hidden.has(el)) {
+        hidden.set(el, [el.style.getPropertyValue('display'), el.style.getPropertyPriority('display')]);
+      }
+      if (el.style.getPropertyValue('display') !== 'none' || el.style.getPropertyPriority('display') !== 'important') {
+        el.style.setProperty('display', 'none', 'important');
+      }
+    });
+  }
+
+  function pause() {
+    if (!observer) {
+      observer = new MutationObserver(hideLoaders);
+      // React can replace the marker or the whole gallery after an in-flight
+      // response. Hide replacement markers before the next layout as well.
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+    }
+    hideLoaders();
+    return { pausedLoaders: hidden.size };
+  }
+
+  function resume() {
+    observer?.disconnect();
+    observer = null;
+    for (const [el, [display, priority]] of hidden) {
+      if (display) el.style.setProperty('display', display, priority);
+      else el.style.removeProperty('display');
+    }
+    hidden.clear();
+  }
+
+  window.__archiverPagination = { pause, resume };
+})();
+
 (() => {
   const state = {
     running: false,
@@ -14,6 +60,8 @@
     allImageUrls: new Set(), // every image destined for archive
     observer: null,
     scrollTimer: null,
+    scrollWake: null,
+    runId: 0,
     lastNewItemAt: 0,
     bucket: null,
     scrollEl: null,
@@ -122,6 +170,7 @@
 
   function processAnchorImg(anchor, img) {
     if (!state.running || state.captured >= state.maxItems) return;
+    const runId = state.runId;
     const detailUrl = absUrl(anchor.getAttribute('href') || '');
     if (!detailUrl) return;
 
@@ -133,7 +182,7 @@
 
     // Wait for image attributes to settle before cloning
     stabilityWatcher(img, state.stabilityTimeout, async () => {
-      if (!state.running || state.captured >= state.maxItems) return;
+      if (runId !== state.runId || !state.running || state.captured >= state.maxItems) return;
       const bestNow = pickBestFromSrcset(img) || img.src || initialUrl;
       if (!bestNow || isTinyDataURI(bestNow)) return;
 
@@ -141,7 +190,7 @@
       cloneImg.src = bestNow;
       state.bucket.appendChild(cloneImg);
       const ok = await finalizeIfGood(cloneImg);
-      if (!ok || !state.running) {
+      if (!ok || runId !== state.runId || !state.running) {
         cloneImg.remove();
         return;
       }
@@ -184,13 +233,14 @@
           state.seenDetailUrls.add(detailUrl);
           state.seen++;
 
+          const runId = state.runId;
           stabilityWatcher(a, state.stabilityTimeout, async () => {
-            if (!state.running || state.captured >= state.maxItems) return;
+            if (runId !== state.runId || !state.running || state.captured >= state.maxItems) return;
             const cloneImg = document.createElement('img');
             cloneImg.src = url;
             state.bucket.appendChild(cloneImg);
             const ok = await finalizeIfGood(cloneImg);
-            if (!ok || !state.running) {
+            if (!ok || runId !== state.runId || !state.running) {
               cloneImg.remove();
               return;
             }
@@ -238,7 +288,19 @@
     return page;
   }
 
-  async function autoScrollLoop() {
+  function waitForScrollDelay() {
+    return new Promise(resolve => {
+      state.scrollWake = resolve;
+      state.scrollTimer = setTimeout(() => {
+        state.scrollTimer = null;
+        state.scrollWake = null;
+        resolve();
+      }, state.scrollDelay);
+    });
+  }
+
+  async function autoScrollLoop(runId) {
+    const isActive = () => state.running && state.runId === runId;
     const scrollEl = state.scrollEl || (state.scrollEl = getScrollElement());
     state.lastNewItemAt = performance.now();
     // Require a quiet interval at the bottom; infinite galleries can pause here
@@ -248,14 +310,14 @@
     let lastHeight = scrollEl.scrollHeight;
     let lastSeen = state.seen;
     let lastCaptured = state.captured;
-    while (state.running) {
+    while (isActive()) {
       const before = state.captured;
-      scrollEl.scrollBy(0, scrollEl.clientHeight * 0.9);
-      await new Promise(r => setTimeout(r, state.scrollDelay));
-      if (!state.running) break;
+      scrollEl.scrollBy({ top: scrollEl.clientHeight * 0.9, behavior: 'instant' });
+      await waitForScrollDelay();
+      if (!isActive()) break;
 
       scanOnce();
-      if (!state.running) break;
+      if (!isActive()) break;
 
       const now = performance.now();
       const height = scrollEl.scrollHeight;
@@ -282,9 +344,9 @@
       if (state.captured > before) {
         state.lastNewItemAt = now;
       } else if (now - state.lastNewItemAt > 6000) {
-        scrollEl.scrollBy(0, 50);
-        await new Promise(r => setTimeout(r, state.scrollDelay));
-        if (!state.running) break;
+        scrollEl.scrollBy({ top: 50, behavior: 'instant' });
+        await waitForScrollDelay();
+        if (!isActive()) break;
         scanOnce();
       }
     }
@@ -331,6 +393,7 @@
   async function startRunning() {
     if (state.running) return;
     state.running = true;
+    const runId = ++state.runId;
     state.seen = 0;
     state.captured = 0;
     state.deduped = 0;
@@ -343,6 +406,8 @@
     const opts = await new Promise(resolve => {
     chrome.storage.local.get({ maxItems: 200, scrollDelay: 300, stabilityTimeout: 400 }, resolve);
     });
+    if (!state.running || runId !== state.runId) return;
+    window.__archiverPagination.resume();
     state.maxItems = parseInt(opts.maxItems, 10) || 200;
     state.scrollDelay = parseInt(opts.scrollDelay, 10) || 300;
     state.stabilityTimeout = parseInt(opts.stabilityTimeout, 10) || 400;
@@ -359,21 +424,26 @@
     // the target only after those styles have taken effect.
     applyScrollStyles();
     state.scrollEl = getScrollElement();
-    state.scrollEl.scrollTo(0, 0);
+    state.scrollEl.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     scanOnce();
-    autoScrollLoop();
+    autoScrollLoop(runId);
   }
 
   function stopRunning(freeze=false, restoreStyles=true, reachedEnd=false) {
     state.running = false;
+    if (!freeze && !restoreStyles) window.__archiverPagination.pause();
+    state.runId++;
     if (state.observer) {
       state.observer.disconnect();
       state.observer = null;
     }
-    if (state.scrollTimer) {
+    if (state.scrollTimer !== null) {
       clearTimeout(state.scrollTimer);
       state.scrollTimer = null;
     }
+    // Wake the old loop so it exits, even if another run starts immediately.
+    state.scrollWake?.();
+    state.scrollWake = null;
     state.scrollEl = null;
     if (freeze) {
       freezePage();
@@ -384,12 +454,23 @@
         state.bucket = null;
       }
     }
+    // Restore the constrained live layout before allowing pagination again.
+    if (freeze || restoreStyles) window.__archiverPagination.resume();
     postState();
     if (state.autoSave && (state.captured >= state.maxItems || reachedEnd)) {
       chrome.runtime.sendMessage({ type: 'ARCHIVER_SAVE_MHTML' });
     }
     state.autoSave = false;
   }
+
+  window.__archiverCapture = {
+    pause() {
+      // Preserve collected images and capture styles for the export. A manual
+      // save must not trigger a second automatic save when pausing capture.
+      state.autoSave = false;
+      stopRunning(false, false);
+    }
+  };
 
   function scrollElementToTop(el) {
     if (!el) return false;
@@ -845,6 +926,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   async function prepareForSave() {
+    window.__archiverCapture?.pause();
     const solo = window.__archiverPrepareSolo?.detect?.();
     const s1 = await freezeVideosInPlace();
     const s2 = await freezeStandaloneVideos();
