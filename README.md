@@ -62,7 +62,7 @@ Click **Start and Save**, or press `Alt+3`.
 
 This starts the capture process and automatically saves when the configured item limit is reached, or when the page stays at the bottom without new images or page growth for about six seconds. Images still loading receive extra time (up to about 30 seconds of inactivity). This also works when the gallery has fewer images than **Max items**.
 
-The visible page scrolls as images load. After a save finishes, you can select another model version using Civitai's in-page controls and press `Alt+3` again without refreshing. Each run starts a fresh image collection.
+The visible page scrolls as images load. Autoscroll stops as soon as the capture limit is reached and stays stopped while the archive is prepared and the save dialog opens. The extension also temporarily hides Civitai's gallery loading marker so expanding the page for saving does not trigger continuous fetching of more batches. A batch already in flight can still finish; the capture limit is not an exact limit on every image included in the MHTML. After a save finishes, normal gallery loading resumes, and you can select another model version using Civitai's in-page controls and press `Alt+3` again without refreshing. Each run starts a fresh image collection.
 
 ### Save All Tabs
 
@@ -215,10 +215,20 @@ Useful project docs:
 - `docs/project_status.md`: current Civitai MHTML layout fix status and history
 - `docs/gallery_archiver_save_flow_design_notes.md`: save-flow design notes and guardrails
 - `docs/PRD.md`: product requirements notes
+- `docs/preparation-pagination-repair.md`: save-preparation loading-loop diagnosis and browser regression results
 
 ## Repository Status
 
-Current extension version: `1.1.1` (kept in sync across `manifest.json`, `package.json`, and `package-lock.json`).
+Current extension version: `1.1.2` (kept in sync across `manifest.json`, `package.json`, and `package-lock.json`).
+
+### Changes In 1.1.2
+
+- Pauses Civitai's gallery loading marker at the capture limit and during save preparation, preventing continuous batch fetching and oversized archives when the save layout expands the page.
+- Cancels pending autoscroll timers and prevents callbacks from previous capture runs from restarting capture.
+- Restores normal gallery loading after save cleanup and when a new capture starts.
+- Adds regression coverage for delayed preparation, replacement loading markers, rapid restarts, and a real-browser infinite-loading reproduction.
+
+After updating the unpacked extension, reload it on the browser's extensions page and refresh any open Civitai tabs to activate the repair.
 
 ### Changes In 1.1.1
 
